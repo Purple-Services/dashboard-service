@@ -11,6 +11,17 @@
 ;; dereferencing is @@zones
 (def zones (atom nil))
 
+(defn get-all-zones-from-db
+  "Get all zones from the database."
+  [db-conn]
+  (!select db-conn "zones" ["*"] {}))
+
+(defn update-zones!
+  "Update the zones var held in memory with that in the database"
+  [db-conn]
+  (reset! @zones (map #(update-in % [:zip_codes] split-on-comma)
+                     (get-all-zones-from-db db-conn))))
+
 (defn read-zone-strings
   "Given a zone from the database, convert edn strings to clj data"
   [zone]
@@ -109,19 +120,40 @@
                                ]]})
 
 (defn validate-and-update-zone!
-  "Given a zone map, validate it. If valid, create zone else return the
-  bouncer error map"
+  "Given a zone map, validate it. If valid, update zone else return the
+  bouncer error map.
+
+  Update fields are fuel_prices, service_fees and service_time_bracket
+
+  fuel-prices is an edn string map of the format
+  '{:87 <integer cents> :91 <integer cents>}'.
+
+  service-fees is an edn string map of the format
+  '{:60 <integer cents> :180 <integer cents>}'.
+
+  service-time-bracket is an edn string vector of the format
+  '[<service-start> <service-end>]' where <service-start> and <service-end>
+  are integer values of the total minutes elapsed in a day at a particular
+  time.
+
+  ex:
+  The vector [450 1350] represents the time bracket 7:30am-10:30pm where
+  7:30am is represented as 450 which is (+ (* 60 7) 30)
+  10:30pm is represened as 1350 which is (+ (* 60 22) 30)"
   [db-conn zone]
   (if (b/valid? zone zone-validations)
     (let [{:keys [price-87 price-91 service-fee-60 service-fee-180
                   service-time-bracket-begin service-time-bracket-end]} zone]
-      (!update db-conn "zones"
-               {:fuel_prices (str {:87 price-87
-                                   :91 price-91})
-                :service_fees (str {:60 service-fee-60
-                                    :180 service-fee-180})
-                :service_time_bracket (str [service-time-bracket-begin
-                                            service-time-bracket-end])}
-               {:id (:id zone)}))
+      (when (:success
+             (!update db-conn "zones"
+                      {:fuel_prices (str {:87 price-87
+                                          :91 price-91})
+                       :service_fees (str {:60 service-fee-60
+                                           :180 service-fee-180})
+                       :service_time_bracket (str [service-time-bracket-begin
+                                                   service-time-bracket-end])}
+                      {:id (:id zone)}))
+        (update-zones! db-conn)
+        {:success true}))
     {:success false
      :validation (b/validate zone zone-validations)}))
