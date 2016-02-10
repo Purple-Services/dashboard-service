@@ -1,4 +1,4 @@
-(defproject dashboard-clj "0.5.0-SNAPSHOT"
+(defproject dashboard-clj "1.0.0-SNAPSHOT"
   :description "Dashboard server library"
   :url "http://purpledelivery.com"
   :dependencies [[org.clojure/clojure "1.7.0"]
