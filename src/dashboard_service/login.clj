@@ -1,7 +1,7 @@
-(ns dashboard-clj.login
-  (:require [dashboard-clj.db :as db]
-            [dashboard-clj.util :as util]
-            [dashboard-clj.users :refer [valid-email? valid-password?
+(ns dashboard-service.login
+  (:require [common.db :as db]
+            [common.util :as util]
+            [common.users :refer [valid-email? valid-password?
                                          auth-native?]]
             [crypto.password.bcrypt :as bcrypt]))
 

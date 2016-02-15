@@ -1,23 +1,10 @@
-(ns dashboard-clj.coupons
+(ns dashboard-service.coupons
   (:require [bouncer.core :as b]
             [bouncer.validators :as v]
             [clojure.string :as s]
-            [dashboard-clj.db :refer [conn !insert !select !update]]
-            [dashboard-clj.util :refer [rand-str-alpha-num split-on-comma]]
-            ))
-
-(defn format-coupon-code
-  "Format coupon code to consistent format. (Keep this idempotent!)"
-  [code]
-  (s/replace (s/upper-case code) #" " ""))
-
-(defn get-coupon-by-code
-  "Get a coupon from DB given its code (e.g., GAS15)."
-  [db-conn code]
-  (first (!select db-conn
-                  "coupons"
-                  ["*"]
-                  {:code code})))
+            [common.coupons :refer [get-coupon-by-code format-coupon-code]]
+            [common.db :refer [conn !insert !select !update]]
+            [common.util :refer [rand-str-alpha-num split-on-comma]]))
 
 (defn coupons
   "Retrieve all coupons"
@@ -32,7 +19,7 @@
 (defn code-available?
   "Is the code for coupon currently available?"
   [code]
-  (not (boolean (get-coupon-by-code @conn code))))
+  (not (boolean (get-coupon-by-code (conn) code))))
 
 (def new-coupon-validations
   {:code [[code-available? :message "Code is already in use"]

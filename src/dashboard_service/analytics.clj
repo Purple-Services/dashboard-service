@@ -1,8 +1,8 @@
-(ns dashboard-clj.analytics
-  (:require [dashboard-clj.config :as config]
-            [dashboard-clj.db :refer [conn !select !insert !update
+(ns dashboard-service.analytics
+  (:require [common.config :as config]
+            [common.db :refer [conn !select !insert !update
                                       mysql-escape-str]]
-            [dashboard-clj.util :refer [in?]]
+            [common.util :refer [in?]]
             [clojure.string :as s]
             [clojure.data.csv :as csv]
             [clojure.java.io :as io]

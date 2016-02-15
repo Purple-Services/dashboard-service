@@ -1,21 +1,8 @@
-(ns dashboard-clj.couriers
+(ns dashboard-service.couriers
   (:require [clojure.string :as s]
-            [dashboard-clj.db :refer [!select !update]]
-            [dashboard-clj.util :refer [split-on-comma]]))
-
-(defn process-courier
-  "Process a courier"
-  [courier]
-  (assoc courier
-         :zones (if (s/blank? (:zones courier))
-                  ;; courier is not assigned to any zones, blank field
-                  #{}
-                  (set (map (fn [x] (Integer. x))
-                            (split-on-comma (:zones courier)))))
-         :timestamp_created
-         (/ (.getTime
-             (:timestamp_created courier))
-            1000)))
+            [common.couriers :refer [process-courier]]
+            [common.db :refer [!select !update]]
+            [common.util :refer [split-on-comma]]))
 
 (defn get-by-id
   "Get a courier from db by courier's id"
@@ -28,18 +15,6 @@
       {:success false
        :error (str "There is no courier with id: " id)}
       (process-courier courier))))
-
-;; Note that this converts couriers' "zones" from string to a set of Integer's
-(defn get-couriers
-  "Gets couriers from db. Optionally add WHERE constraints."
-  [db-conn & {:keys [where]}]
-  (map process-courier
-       (!select db-conn "couriers" ["*"] (merge {} where))))
-
-(defn all-couriers
-  "All couriers."
-  [db-conn]
-  (get-couriers db-conn))
 
 (defn include-lateness
   "Given a courier map m, return a map with :lateness included using
@@ -89,7 +64,7 @@
                                            (map (comp #(Integer. %) s/trim))
                                            set))
                                (catch Exception e (str "Error")))
-        existant-zones-set (set (map :id ;; @@(resolve 'purple.dispatch/zones)
+        existant-zones-set (set (map :id
                                      (!select db-conn "zones" [:id] {})))
         all-zones-exist? (every? identity
                                  (map #(contains? existant-zones-set %)

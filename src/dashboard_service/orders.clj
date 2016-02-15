@@ -1,31 +1,12 @@
-(ns dashboard-clj.orders
+(ns dashboard-service.orders
   (:require [clojure.algo.generic.functor :refer [fmap]]
             [clojure.string :as s]
             [clojure.walk :refer [stringify-keys]]
-            [dashboard-clj.db :refer [!select]]
-            [dashboard-clj.users :as users]
-            [dashboard-clj.util :refer [in? map->java-hash-map split-on-comma]]
-            [dashboard-clj.zones :refer [get-zone-by-zip-code]]))
-
-;; the compute distance fn
-(def computeDistance (atom nil))
-
-;; the cancel order fn
-(def cancel (atom nil))
-
-;; update-status-by-admin fn
-(def update-status-by-admin (atom nil))
-
-;; assign-to-courier-by-admin
-(def assign-to-courier-by-admin (atom nil))
-
-(defn get-by-id
-  "Gets an order from db by order's id."
-  [db-conn id]
-  (first (!select db-conn
-                  "orders"
-                  ["*"]
-                  {:id id})))
+            [common.db :refer [!select]]
+            [opt.planner :refer [compute-distance]]
+            [common.users :as users]
+            [common.util :refer [in? map->java-hash-map split-on-comma]]
+            [common.zones :refer [get-zone-by-zip-code]]))
 
 (defn orders-since-date
   "Get all orders since date. A blank date will return all orders. When
@@ -135,36 +116,33 @@
         id->name #(:name (first (get users-by-id %)))
         couriers-by-id (into {} (map (juxt (comp keyword :id) identity)
                                      all-couriers))
-        dist-map (into
-                  {}
-                  (@computeDistance
-                   (map->java-hash-map
-                    {"orders" (->> orders
-                                   (filter #(in? ["unassigned"
-                                                  "assigned"
-                                                  "accepted"
-                                                  "enroute"]
-                                                 (:status %)))
-                                   (map #(assoc %
-                                                :status_times
-                                                (-> (:event_log %)
-                                                    (s/split #"\||\s")
-                                                    (->> (remove s/blank?)
-                                                         (apply hash-map)
-                                                         (fmap read-string)))))
+        dist-map (compute-distance
+                  {"orders" (->> orders
+                                 (filter #(in? ["unassigned"
+                                                "assigned"
+                                                "accepted"
+                                                "enroute"]
+                                               (:status %)))
+                                 (map #(assoc %
+                                              :status_times
+                                              (-> (:event_log %)
+                                                  (s/split #"\||\s")
+                                                  (->> (remove s/blank?)
+                                                       (apply hash-map)
+                                                       (fmap read-string)))))
+                                 (map (juxt :id stringify-keys))
+                                 (into {}))
+                   "couriers" (->> (!select db-conn
+                                            "couriers"
+                                            [:id :lat :lng :last_ping
+                                             :connected :zones]
+                                            {:active true
+                                             :on_duty true})
+                                   (map #(update-in % [:zones]
+                                                    split-on-comma))
+                                   (map #(assoc % :assigned_orders []))
                                    (map (juxt :id stringify-keys))
-                                   (into {}))
-                     "couriers" (->> (!select db-conn
-                                              "couriers"
-                                              [:id :lat :lng :last_ping
-                                               :connected :zones]
-                                              {:active true
-                                               :on_duty true})
-                                     (map #(update-in % [:zones]
-                                                      split-on-comma))
-                                     (map #(assoc % :assigned_orders []))
-                                     (map (juxt :id stringify-keys))
-                                     (into {}))})))]
+                                   (into {}))})]
     (map #(assoc %  :etas (if-let [this-dist-map (get dist-map (:id %))]
                             (map (fn [x]
                                    {:name (id->name (key x))

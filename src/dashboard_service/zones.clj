@@ -1,26 +1,11 @@
-(ns dashboard-clj.zones
+(ns dashboard-service.zones
   (:require [bouncer.core :as b]
             [bouncer.validators :as v]
             [clojure.string :as s]
             [clojure.walk :refer [stringify-keys]]
-            [dashboard-clj.util :refer [split-on-comma five-digit-zip-code
+            [common.util :refer [split-on-comma five-digit-zip-code
                                         in?]]
-            [dashboard-clj.db :refer [!select !update]]))
-
-;; because this will hold an atom from the server
-;; dereferencing is @@zones
-(def zones (atom nil))
-
-(defn get-all-zones-from-db
-  "Get all zones from the database."
-  [db-conn]
-  (!select db-conn "zones" ["*"] {}))
-
-(defn update-zones!
-  "Update the zones var held in memory with that in the database"
-  [db-conn]
-  (reset! @zones (map #(update-in % [:zip_codes] split-on-comma)
-                     (get-all-zones-from-db db-conn))))
+            [common.db :refer [!select !update]]))
 
 (defn read-zone-strings
   "Given a zone from the database, convert edn strings to clj data"
@@ -39,37 +24,6 @@
                   "zones"
                   ["*"]
                   {:id id})))
-
-(defn order->zone-id
-  "Determine which zone the order is in; gives the zone id."
-  [order]
-  (let [zip-code (five-digit-zip-code (:address_zip order))]
-    (:id (first (filter #(in? (:zip_codes %) zip-code)
-                        @@zones)))))
-
-(defn get-zone-by-zip-code
-  "Given a zip code, return the corresponding zone"
-  [zip-code]
-  (-> (filter #(= (:id %) (order->zone-id {:address_zip zip-code})) @@zones)
-      first))
-
-
-(defn get-all-zones-from-db
-  "Get all zones from the database."
-  [db-conn]
-  (!select db-conn "zones" ["*"] {}))
-
-(defn get-zctas-for-zips
-  "Given a string of comma-seperated zips and db-conn, return a list of
-  zone/coordinates maps."
-  [db-conn zips]
-  (let [in-clause (str "("
-                       (s/join ","
-                               (map #(str "'" % "'")
-                                    (split-on-comma zips)))
-                       ")")]
-    (!select db-conn "zctas" ["*"] {}
-             :custom-where (str "zip in " in-clause))))
 
 (def zone-validations
   {:price-87 [[v/required :message "87 Octane price can not be blank!"]
@@ -153,7 +107,6 @@
                        :service_time_bracket (str [service-time-bracket-begin
                                                    service-time-bracket-end])}
                       {:id (:id zone)}))
-        (update-zones! db-conn)
         {:success true}))
     {:success false
      :validation (b/validate zone zone-validations)}))

@@ -1,7 +1,7 @@
-(ns dashboard-clj.pages
+(ns dashboard-service.pages
   (:require [net.cgrand.enlive-html :refer [after append html do-> unwrap content
                                             set-attr deftemplate]]
-            [dashboard-clj.config :as config]))
+            [common.config :as config]))
 
 (deftemplate dash-login-template "templates/dashmap.html"
   [x]
@@ -38,8 +38,9 @@
 
 (defn dash-login
   []
-  (apply str (dash-login-template {:base-url
-                                   (str config/base-url "dashboard/")})))
+  (apply str (dash-login-template
+              {:base-url
+               (str config/base-url "dashboard/")})))
 
 (deftemplate dash-app-template "templates/dashmap.html"
   [x]
@@ -96,8 +97,9 @@
 
 (defn dash-app
   []
-  (apply str (dash-app-template {:base-url
-                                 (str config/base-url "dashboard/")})))
+  (apply str (dash-app-template
+              {:base-url
+               (str config/base-url "dashboard/")})))
 
 (deftemplate dash-map-template "templates/dashmap.html"
   [x]
@@ -113,8 +115,7 @@
                             :type "text/css"
                             :href (str config/base-url "css/pikaday.css")}])))
 
-  [:#base-url] (set-attr :value (str (:base-url x)
-                                     (:uri-segment x)))
+  [:#base-url] (set-attr :value (str (:base-url x)))
   [:#map-init]
   (set-attr :src
             (str "https://maps.googleapis.com/maps/api/js?"
@@ -125,10 +126,6 @@
 
 (defn dash-map
   [& {:keys [read-only courier-manager callback-s]}]
-  (apply str (dash-map-template {:base-url config/base-url
-                                 :uri-segment (cond
-                                                courier-manager "manager/"
-                                                read-only "stats/"
-                                                :else "dashboard/")
+  (apply str (dash-map-template {:base-url (str  config/base-url "dashboard/")
                                  :read-only read-only
                                  :callback-s callback-s })))
