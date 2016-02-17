@@ -14,7 +14,7 @@
                  [common "1.0.0-SNAPSHOT"]
                  [opt "0.1.0-SNAPSHOT"]]
   :plugins [[lein-ring "0.9.7"]]
-  :ring {:handler dashboard-service.handler/dashboard
+  :ring {:handler dashboard-service.handler/handler
          :auto-reload? false
          :auth-refresh? false
          :browser-uri "dashboard/"

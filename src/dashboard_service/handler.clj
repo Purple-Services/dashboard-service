@@ -2,6 +2,7 @@
   (:require [clojure.string :as s]
             [clojure.walk :refer [keywordize-keys stringify-keys]]
             [compojure.core :refer :all]
+            [compojure.handler :refer [site]]
             [compojure.route :as route]
             [clout.core :as clout]
             [ring.util.response :refer [header set-cookie response redirect]]
@@ -226,233 +227,244 @@
 ;; 5. try to be logical and use your best judgement when these
 ;;    rules fail
 (defroutes dashboard-routes
-  (context "/dashboard" []
-           ;;!! main dash
-           (GET "/" []
-                (-> (pages/dash-app)
-                    response
-                    wrap-page))
-           (GET "/permissions" {cookies :cookies}
-                (let [user-perms (login/get-permissions
-                                  (conn)
-                                  (get-in cookies ["user-id" :value]))
-                      accessible-routes (login/accessible-routes
-                                         dashboard-uri-permissions
-                                         user-perms)]
-                  (response (into [] accessible-routes))))
-           ;;!! login / logout
-           (GET "/login" []
-                (-> (pages/dash-login)
-                    response
-                    wrap-page))
-           (POST "/login" {body :body
-                           headers :headers
-                           remote-addr :remote-addr}
-                 (response
-                  (let [b (keywordize-keys body)]
-                    (login/login (conn) (:email b) (:password b)
-                                 (or (get headers "x-forwarded-for")
-                                     remote-addr)))))
-           (GET "/logout" []
-                (-> (redirect "/dashboard/login")
-                    (set-cookie "token" "null" {:max-age -1})
-                    (set-cookie "user-id" "null" {:max-age -1})))
-           ;;!! dash maps
-           (GET "/dash-map-orders" []
-                (-> (pages/dash-map :callback-s
-                                    "dashboard_cljs.core.init_map_orders")
-                    response
-                    wrap-page))
-           (GET "/dash-map-couriers" []
-                (-> (pages/dash-map :callback-s
-                                    "dashboard_cljs.core.init_map_couriers")
-                    response
-                    wrap-page))
-           ;;!! couriers
-           ;; return all couriers
-           ;; get a courier by id
-           (GET "/courier/:id" [id]
-                (response
-                 (into []
-                       (->> (get-by-id (conn) id)
-                            list
-                            (users/include-user-data (conn))
-                            (include-lateness (conn))))))
-           ;; update a courier
-           ;; currently, only the zones can be updated
-           (POST "/courier" {body :body}
-                 (let [b (keywordize-keys body)]
-                   (response (update-courier-zones!
-                              (conn)
-                              (:id b)
-                              (:zones b)))))
-           (POST "/couriers" {body :body}
-                 (response
-                  (let [b (keywordize-keys body)]
-                    {:couriers (->> (couriers/all-couriers (conn))
-                                    (users/include-user-data (conn))
-                                    (include-lateness (conn)))})))
-           ;;!! users
-           (GET "/users" []
-                (response
-                 (into []
-                       (dash-users (conn)))))
-           (GET "/users-count" []
-                (response
-                 (into []
-                       (!select (conn) "users" ["count(*) as total"] {}))))
-           (POST "/send-push-to-all-active-users" {body :body}
-                 (response
-                  (let [b (keywordize-keys body)]
-                    (send-push-to-all-active-users (conn)
-                                                   (:message b)))))
-           (POST "/send-push-to-users-list" {body :body}
-                 (response
-                  (let [b (keywordize-keys body)]
-                    (send-push-to-users-list (conn)
-                                             (:message b)
-                                             (:user-ids b)))))
-           ;;!! coupons
-           ;; get a coupon by code
-           (GET "/coupon/:code" [code]
-                (response
-                 (into []
-                       (->> (coupons/get-coupon-by-code (conn) code)
-                            convert-timestamp
-                            list))))
-           ;; edit an existing coupon
-           (PUT "/coupon" {body :body}
-                (let [b (keywordize-keys body)]
-                  (response
-                   (update-standard-coupon! (conn) b))))
-           ;; create a new coupon
-           (POST "/coupon" {body :body}
-                 (let [b (keywordize-keys body)]
-                   (response
-                    (create-standard-coupon! (conn) b))))
-           ;; get the current coupon codes
-           (GET "/coupons" []
-                (response
-                 (into []
-                       (-> (coupons (conn))
-                           (convert-timestamps)))))
-           ;;!! zones
-           ;; get a zone by its id
-           (GET "/zone/:id" [id]
-                (response
-                 (into []
-                       (->> (get-zone-by-id (conn) id)
-                            (read-zone-strings)
-                            list))))
-           ;; update a zone's description. currently only supports
-           ;; updating fuel_prices, service_fees and service_time_bracket
-           (PUT "/zone" {body :body}
-                (let [b (keywordize-keys body)]
-                  (response
-                   (validate-and-update-zone! (conn) b))))
-           ;; return all zones
-           (GET "/zones" []
-                (response
-                 ;; needed because cljs.reader/read-string can't handle
-                 ;; keywords that begin with numbers
-                 (mapv
-                  #(assoc %
-                          :fuel_prices (stringify-keys
-                                        (read-string (:fuel_prices %)))
-                          :service_fees (stringify-keys
-                                         (read-string (:service_fees %)))
-                          :service_time_bracket (read-string
-                                                 (:service_time_bracket %)))
-                  (into [] (zones/get-all-zones-from-db (conn))))))
-           ;; return zcta defintions for zips
-           (POST "/zctas" {body :body}
-                 (response
-                  (let [b (keywordize-keys body)]
-                    {:zctas
-                     (zones/get-zctas-for-zips (conn) (:zips b))})))
-           ;;!! orders
-           ;; given an order id, get the detailed information for that
-           ;; order
-           (POST "/order"  {body :body}
-                 (response
-                  (let [b (keywordize-keys body)]
-                    (if (:id b)
-                      (into []
-                            (->>
-                             [(orders/get-by-id (conn)
-                                                (:id b))]
-                             (include-user-name-phone-and-courier
-                              (conn))
-                             (include-vehicle (conn))
-                             (include-zone-info)
-                             (include-eta (conn))
-                             (include-was-late)))
-                      []))))
-           ;; cancel the order
-           (POST "/cancel-order" {body :body}
-                 (response
-                  (let [b (keywordize-keys body)]
-                    (orders/cancel
+  ;;!! main dash
+  (GET "/" []
+       (-> (pages/dash-app)
+           response
+           wrap-page))
+  (GET "/permissions" {cookies :cookies}
+       (let [user-perms (login/get-permissions
+                         (conn)
+                         (get-in cookies ["user-id" :value]))
+             accessible-routes (login/accessible-routes
+                                dashboard-uri-permissions
+                                user-perms)]
+         (response (into [] accessible-routes))))
+  ;;!! login / logout
+  (GET "/login" []
+       (-> (pages/dash-login)
+           response
+           wrap-page))
+  (POST "/login" {body :body
+                  headers :headers
+                  remote-addr :remote-addr}
+        (response
+         (let [b (keywordize-keys body)]
+           (login/login (conn) (:email b) (:password b)
+                        (or (get headers "x-forwarded-for")
+                            remote-addr)))))
+  (GET "/logout" []
+       (-> (redirect "/dashboard/login")
+           (set-cookie "token" "null" {:max-age -1})
+           (set-cookie "user-id" "null" {:max-age -1})))
+  ;;!! dash maps
+  (GET "/dash-map-orders" []
+       (-> (pages/dash-map :callback-s
+                           "dashboard_cljs.core.init_map_orders")
+           response
+           wrap-page))
+  (GET "/dash-map-couriers" []
+       (-> (pages/dash-map :callback-s
+                           "dashboard_cljs.core.init_map_couriers")
+           response
+           wrap-page))
+  ;;!! couriers
+  ;; return all couriers
+  ;; get a courier by id
+  (GET "/courier/:id" [id]
+       (response
+        (into []
+              (->> (get-by-id (conn) id)
+                   list
+                   (users/include-user-data (conn))
+                   (include-lateness (conn))))))
+  ;; update a courier
+  ;; currently, only the zones can be updated
+  (POST "/courier" {body :body}
+        (let [b (keywordize-keys body)]
+          (response (update-courier-zones!
                      (conn)
-                     (:user_id b)
-                     (:order_id b)
-                     :origin-was-dashboard true
-                     :notify-customer true
-                     :suppress-user-details true
-                     :override-cancellable-statuses
-                     (conj config/cancellable-statuses "servicing")))))
-           ;; admin updates status of order (e.g., enroute -> servicing)
-           (POST "/update-status" {body :body}
-                 (response
-                  (let [b (keywordize-keys body)]
-                    (orders/update-status-by-admin (conn)
-                                                   (:order_id b)))))
-           ;; admin assigns courier to an order
-           (POST "/assign-order" {body :body}
-                 (response
-                  (let [b (keywordize-keys body)]
-                    (orders/assign-to-courier-by-admin (conn)
-                                                       (:order_id b)
-                                                       (:courier_id b)))))
-           ;; given a date in the format yyyy-mm-dd, return all orders
-           ;; that have occurred since then
-           (POST "/orders-since-date"  {body :body}
-                 (response
-                  (let [b (keywordize-keys body)]
-                    (into [] (->>
-                              (orders-since-date (conn)
-                                                 (:date b)
-                                                 (:unix-epoch? b))
-                              (include-user-name-phone-and-courier
-                               (conn))
-                              (include-vehicle (conn))
-                              (include-zone-info)
-                              (include-was-late)
-                              )))))
-           ;;!! analytics
-           (GET "/status-stats-csv" []
-                (response
-                 (let [stats-file (java.io.File. "stats.csv")]
-                   (if (> (.length stats-file) 0)
-                     {:processing? false
-                      :timestamp (quot (.lastmodified stats-file)
-                                       1000)}
-                     {:processing? true}))))
-           ;; generate analytics file
-           (GET "/generate-stats-csv" []
-                (do (future (analytics/gen-stats-csv))
-                    (response {:success true})))
-           (GET "/download-stats-csv" []
-                (-> (response (java.io.File. "stats.csv"))
-                    (header "content-type:"
-                            "text/csv; name=\"stats.csv\"")
-                    (header "content-disposition"
-                            "attachment; filename=\"stats.csv\""))))
+                     (:id b)
+                     (:zones b)))))
+  (POST "/couriers" {body :body}
+        (response
+         (let [b (keywordize-keys body)]
+           {:couriers (->> (couriers/all-couriers (conn))
+                           (users/include-user-data (conn))
+                           (include-lateness (conn)))})))
+  ;;!! users
+  (GET "/users" []
+       (response
+        (into []
+              (dash-users (conn)))))
+  (GET "/users-count" []
+       (response
+        (into []
+              (!select (conn) "users" ["count(*) as total"] {}))))
+  (POST "/send-push-to-all-active-users" {body :body}
+        (response
+         (let [b (keywordize-keys body)]
+           (send-push-to-all-active-users (conn)
+                                          (:message b)))))
+  (POST "/send-push-to-users-list" {body :body}
+        (response
+         (let [b (keywordize-keys body)]
+           (send-push-to-users-list (conn)
+                                    (:message b)
+                                    (:user-ids b)))))
+  ;;!! coupons
+  ;; get a coupon by code
+  (GET "/coupon/:code" [code]
+       (response
+        (into []
+              (->> (coupons/get-coupon-by-code (conn) code)
+                   convert-timestamp
+                   list))))
+  ;; edit an existing coupon
+  (PUT "/coupon" {body :body}
+       (let [b (keywordize-keys body)]
+         (response
+          (update-standard-coupon! (conn) b))))
+  ;; create a new coupon
+  (POST "/coupon" {body :body}
+        (let [b (keywordize-keys body)]
+          (response
+           (create-standard-coupon! (conn) b))))
+  ;; get the current coupon codes
+  (GET "/coupons" []
+       (response
+        (into []
+              (-> (coupons (conn))
+                  (convert-timestamps)))))
+  ;;!! zones
+  ;; get a zone by its id
+  (GET "/zone/:id" [id]
+       (response
+        (into []
+              (->> (get-zone-by-id (conn) id)
+                   (read-zone-strings)
+                   list))))
+  ;; update a zone's description. currently only supports
+  ;; updating fuel_prices, service_fees and service_time_bracket
+  (PUT "/zone" {body :body}
+       (let [b (keywordize-keys body)]
+         (response
+          (validate-and-update-zone! (conn) b))))
+  ;; return all zones
+  (GET "/zones" []
+       (response
+        ;; needed because cljs.reader/read-string can't handle
+        ;; keywords that begin with numbers
+        (mapv
+         #(assoc %
+                 :fuel_prices (stringify-keys
+                               (read-string (:fuel_prices %)))
+                 :service_fees (stringify-keys
+                                (read-string (:service_fees %)))
+                 :service_time_bracket (read-string
+                                        (:service_time_bracket %)))
+         (into [] (zones/get-all-zones-from-db (conn))))))
+  ;; return zcta defintions for zips
+  (POST "/zctas" {body :body}
+        (response
+         (let [b (keywordize-keys body)]
+           {:zctas
+            (zones/get-zctas-for-zips (conn) (:zips b))})))
+  ;;!! orders
+  ;; given an order id, get the detailed information for that
+  ;; order
+  (POST "/order"  {body :body}
+        (response
+         (let [b (keywordize-keys body)]
+           (if (:id b)
+             (into []
+                   (->>
+                    [(orders/get-by-id (conn)
+                                       (:id b))]
+                    (include-user-name-phone-and-courier
+                     (conn))
+                    (include-vehicle (conn))
+                    (include-zone-info)
+                    (include-eta (conn))
+                    (include-was-late)))
+             []))))
+  ;; cancel the order
+  (POST "/cancel-order" {body :body}
+        (response
+         (let [b (keywordize-keys body)]
+           (orders/cancel
+            (conn)
+            (:user_id b)
+            (:order_id b)
+            :origin-was-dashboard true
+            :notify-customer true
+            :suppress-user-details true
+            :override-cancellable-statuses
+            (conj config/cancellable-statuses "servicing")))))
+  ;; admin updates status of order (e.g., enroute -> servicing)
+  (POST "/update-status" {body :body}
+        (response
+         (let [b (keywordize-keys body)]
+           (orders/update-status-by-admin (conn)
+                                          (:order_id b)))))
+  ;; admin assigns courier to an order
+  (POST "/assign-order" {body :body}
+        (response
+         (let [b (keywordize-keys body)]
+           (orders/assign-to-courier-by-admin (conn)
+                                              (:order_id b)
+                                              (:courier_id b)))))
+  ;; given a date in the format yyyy-mm-dd, return all orders
+  ;; that have occurred since then
+  (POST "/orders-since-date"  {body :body}
+        (response
+         (let [b (keywordize-keys body)]
+           (into [] (->>
+                     (orders-since-date (conn)
+                                        (:date b)
+                                        (:unix-epoch? b))
+                     (include-user-name-phone-and-courier
+                      (conn))
+                     (include-vehicle (conn))
+                     (include-zone-info)
+                     (include-was-late))))))
+  ;;!! analytics
+  (GET "/status-stats-csv" []
+       (response
+        (let [stats-file (java.io.File. "stats.csv")]
+          (if (> (.length stats-file) 0)
+            {:processing? false
+             :timestamp (quot (.lastmodified stats-file)
+                              1000)}
+            {:processing? true}))))
+  ;; generate analytics file
+  (GET "/generate-stats-csv" []
+       (do (future (analytics/gen-stats-csv))
+           (response {:success true})))
+  (GET "/download-stats-csv" []
+       (-> (response (java.io.File. "stats.csv"))
+           (header "content-type:"
+                   "text/csv; name=\"stats.csv\"")
+           (header "content-disposition"
+                   "attachment; filename=\"stats.csv\"")))
   (route/resources "/"))
 
-(def dashboard
+(defn dashboard []
   (->
    dashboard-routes
+   (wrap-access-rules {:rules access-rules})
+   (wrap-access-rules {:rules login-rules})
+   (wrap-cookies)))
+
+;; used for running dashboard-service independently of app-service
+(defroutes handler-routes
+  (context "/dashboard" []
+           dashboard-routes)
+  (route/resources "/"))
+
+(def handler
+  (->
+   handler-routes
    (wrap-access-rules {:rules access-rules})
    (wrap-access-rules {:rules login-rules})
    (wrap-cookies)
