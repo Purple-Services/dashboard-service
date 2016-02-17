@@ -1,43 +1,43 @@
 (ns dashboard.handler
   (:require [clojure.string :as s]
             [clojure.walk :refer [keywordize-keys stringify-keys]]
-            [compojure.core :refer :all]
-            [compojure.handler :refer [site]]
-            [compojure.route :as route]
-            [clout.core :as clout]
-            [ring.util.response :refer [header set-cookie response redirect]]
             [buddy.auth.accessrules :refer [wrap-access-rules]]
-            [ring.middleware.cookies :refer [wrap-cookies]]
-            [ring.middleware.json :refer [wrap-json-body wrap-json-response]]
-            [dashboard.analytics :as analytics]
-            [dashboard.couriers :refer [get-by-id include-lateness
-                                            update-courier-zones!]]
+            [clout.core :as clout]
             [common.config :as config]
-            [common.couriers :as couriers]
-            [dashboard.coupons :refer [create-standard-coupon!
-                                           coupons
-                                           update-standard-coupon!]]
             [common.coupons :as coupons]
+            [common.couriers :as couriers]
             [common.db :refer [!select conn]]
-            [dashboard.login :as login]
             [common.orders :as orders]
-            [dashboard.orders :refer [include-eta
-                                          include-user-name-phone-and-courier
-                                          include-vehicle
-                                          include-was-late
-                                          include-zone-info
-                                          orders-since-date
-                                          ]]
-            [dashboard.pages :as pages]
-            [dashboard.users :refer [dash-users
-                                         send-push-to-all-active-users
-                                         send-push-to-users-list]]
             [common.users :as users]
             [common.util :refer [convert-timestamp convert-timestamps]]
             [common.zones :as zones]
+            [compojure.core :refer :all]
+            [compojure.handler :refer [site]]
+            [compojure.route :as route]
+            [dashboard.analytics :as analytics]
+            [dashboard.coupons :refer [create-standard-coupon!
+                                       coupons
+                                       update-standard-coupon!]]
+            [dashboard.couriers :refer [get-by-id include-lateness
+                                        update-courier-zones!]]
+            [dashboard.login :as login]
+            [dashboard.orders :refer [include-eta
+                                      include-user-name-phone-and-courier
+                                      include-vehicle
+                                      include-was-late
+                                      include-zone-info
+                                      orders-since-date]]
+            [dashboard.pages :as pages]
+            [dashboard.users :refer [dash-users
+                                     send-push-to-all-active-users
+                                     send-push-to-users-list]]
             [dashboard.zones :refer [get-zone-by-id
-                                         read-zone-strings
-                                         validate-and-update-zone!]]))
+                                     read-zone-strings
+                                     validate-and-update-zone!]]
+            [ring.middleware.cookies :refer [wrap-cookies]]
+            [ring.middleware.json :refer [wrap-json-body wrap-json-response]]
+            [ring.util.response :refer [header set-cookie response redirect]]
+            [ring.middleware.cors :refer [wrap-cors]]))
 
 (defn wrap-page [resp]
   (header resp "content-type" "text/html; charset=utf-8"))
@@ -465,6 +465,8 @@
 (def handler
   (->
    handler-routes
+   (wrap-cors :access-control-allow-origin [#".*"]
+              :access-control-allow-methods [:get :put :post :delete])
    (wrap-access-rules {:rules access-rules})
    (wrap-access-rules {:rules login-rules})
    (wrap-cookies)
