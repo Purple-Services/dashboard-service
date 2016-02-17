@@ -1,4 +1,4 @@
-(ns dashboard-service.users
+(ns dashboard.users
   (:require [clojure.set :refer [join]]
             [clojure.string :as s]
             [crypto.password.bcrypt :as bcrypt]

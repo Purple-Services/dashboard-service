@@ -1,4 +1,4 @@
-(ns dashboard-service.pages
+(ns dashboard.pages
   (:require [net.cgrand.enlive-html :refer [after append html do-> unwrap content
                                             set-attr deftemplate]]
             [common.config :as config]))

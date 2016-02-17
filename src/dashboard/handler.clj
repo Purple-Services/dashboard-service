@@ -1,4 +1,4 @@
-(ns dashboard-service.handler
+(ns dashboard.handler
   (:require [clojure.string :as s]
             [clojure.walk :refer [keywordize-keys stringify-keys]]
             [compojure.core :refer :all]
@@ -9,33 +9,33 @@
             [buddy.auth.accessrules :refer [wrap-access-rules]]
             [ring.middleware.cookies :refer [wrap-cookies]]
             [ring.middleware.json :refer [wrap-json-body wrap-json-response]]
-            [dashboard-service.analytics :as analytics]
-            [dashboard-service.couriers :refer [get-by-id include-lateness
+            [dashboard.analytics :as analytics]
+            [dashboard.couriers :refer [get-by-id include-lateness
                                             update-courier-zones!]]
             [common.config :as config]
             [common.couriers :as couriers]
-            [dashboard-service.coupons :refer [create-standard-coupon!
+            [dashboard.coupons :refer [create-standard-coupon!
                                            coupons
                                            update-standard-coupon!]]
             [common.coupons :as coupons]
             [common.db :refer [!select conn]]
-            [dashboard-service.login :as login]
+            [dashboard.login :as login]
             [common.orders :as orders]
-            [dashboard-service.orders :refer [include-eta
+            [dashboard.orders :refer [include-eta
                                           include-user-name-phone-and-courier
                                           include-vehicle
                                           include-was-late
                                           include-zone-info
                                           orders-since-date
                                           ]]
-            [dashboard-service.pages :as pages]
-            [dashboard-service.users :refer [dash-users
+            [dashboard.pages :as pages]
+            [dashboard.users :refer [dash-users
                                          send-push-to-all-active-users
                                          send-push-to-users-list]]
             [common.users :as users]
             [common.util :refer [convert-timestamp convert-timestamps]]
             [common.zones :as zones]
-            [dashboard-service.zones :refer [get-zone-by-id
+            [dashboard.zones :refer [get-zone-by-id
                                          read-zone-strings
                                          validate-and-update-zone!]]))
 
@@ -456,7 +456,7 @@
    (wrap-access-rules {:rules login-rules})
    (wrap-cookies)))
 
-;; used for running dashboard-service independently of app-service
+;; used for running dashboard server independently of app server
 (defroutes handler-routes
   (context "/dashboard" []
            dashboard-routes)

@@ -1,4 +1,4 @@
-(ns dashboard-service.coupons
+(ns dashboard.coupons
   (:require [bouncer.core :as b]
             [bouncer.validators :as v]
             [clojure.string :as s]

@@ -1,4 +1,4 @@
-(ns dashboard-service.analytics
+(ns dashboard.analytics
   (:require [common.config :as config]
             [common.db :refer [conn !select !insert !update
                                       mysql-escape-str]]

@@ -1,4 +1,4 @@
-(ns dashboard-service.login
+(ns dashboard.login
   (:require [common.db :as db]
             [common.util :as util]
             [common.users :refer [valid-email? valid-password?

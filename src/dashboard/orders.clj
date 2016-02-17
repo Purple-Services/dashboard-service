@@ -1,4 +1,4 @@
-(ns dashboard-service.orders
+(ns dashboard.orders
   (:require [clojure.algo.generic.functor :refer [fmap]]
             [clojure.string :as s]
             [clojure.walk :refer [stringify-keys]]

@@ -1,4 +1,4 @@
-(ns dashboard-service.zones
+(ns dashboard.zones
   (:require [bouncer.core :as b]
             [bouncer.validators :as v]
             [clojure.string :as s]

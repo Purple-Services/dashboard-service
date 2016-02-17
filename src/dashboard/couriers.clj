@@ -1,4 +1,4 @@
-(ns dashboard-service.couriers
+(ns dashboard.couriers
   (:require [clojure.string :as s]
             [common.couriers :refer [process-courier]]
             [common.db :refer [!select !update]]
