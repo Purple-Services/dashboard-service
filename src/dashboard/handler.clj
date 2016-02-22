@@ -384,10 +384,9 @@
                     (include-user-name-phone-and-courier
                      (conn))
                     (include-vehicle (conn))
-                    (include-zone-info)
+                    (include-zone-info (conn))
                     (include-eta (conn))
-                    (include-was-late)))
-             []))))
+                    (include-was-late)))))))
   ;; cancel the order
   (POST "/cancel-order" {body :body}
         (response
@@ -426,7 +425,7 @@
                      (include-user-name-phone-and-courier
                       (conn))
                      (include-vehicle (conn))
-                     (include-zone-info)
+                     (include-zone-info (conn))
                      (include-was-late))))))
   ;;!! analytics
   (GET "/status-stats-csv" []
