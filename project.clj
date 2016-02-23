@@ -16,7 +16,8 @@
                  [opt "0.1.0-SNAPSHOT"]]
   :plugins [[lein-ring "0.9.7"]]
   :ring {:handler dashboard.handler/handler
-         :auto-reload? false
+         :port 3001
+         :auto-reload? true
          :auth-refresh? false
          :browser-uri "dashboard/"
          :reload-paths ["src" "resources" "checkouts"]})

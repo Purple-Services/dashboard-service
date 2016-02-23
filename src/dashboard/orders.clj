@@ -2,11 +2,12 @@
   (:require [clojure.algo.generic.functor :refer [fmap]]
             [clojure.string :as s]
             [clojure.walk :refer [stringify-keys]]
-            [common.db :refer [!select]]
+            [common.db :refer [conn !select]]
             [opt.planner :refer [compute-distance]]
             [common.users :as users]
             [common.util :refer [in? map->java-hash-map split-on-comma]]
-            [common.zones :refer [get-zone-by-zip-code]]))
+            [common.zones :refer [get-all-zones-from-db
+                                  get-zones]]))
 
 (defn orders-since-date
   "Get all orders since date. A blank date will return all orders. When
@@ -71,17 +72,21 @@
 (defn include-zone-info
   "Given a vector of orders, assoc the zone and zone_color associated with the
   order"
-  [orders]
-  (map #(assoc %
-               :zone-color
-               (:color
-                (get-zone-by-zip-code
-                 (:address_zip %)))
-               :zone
-               (:id
-                (get-zone-by-zip-code
-                 (:address_zip %))))
-       orders))
+  [db-conn orders]
+  (let [zones (get-zones db-conn)
+        get-zone-by-zip-code (fn [zip-code]
+                               (first (filter #(in? (:zip_codes %) zip-code)
+                                              zones)))]
+    (map #(assoc %
+                 :zone-color
+                 (:color
+                  (get-zone-by-zip-code
+                   (:address_zip %)))
+                 :zone
+                 (:id
+                  (get-zone-by-zip-code
+                   (:address_zip %))))
+         orders)))
 
 (defn include-was-late
   "Given a vector of orders, assoc the boolean was_late associated with the
