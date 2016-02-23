@@ -37,11 +37,16 @@
             [ring.middleware.cookies :refer [wrap-cookies]]
             [ring.middleware.json :refer [wrap-json-body wrap-json-response]]
             [ring.util.response :refer [header set-cookie response redirect]]
-            [ring.middleware.cors :refer [wrap-cors]]))
+            [ring.middleware.cors :refer [wrap-cors]]
+            [ring.middleware.ssl :refer [wrap-ssl-redirect]]))
 
 (defn wrap-page [resp]
   (header resp "content-type" "text/html; charset=utf-8"))
 
+(defn wrap-force-ssl [resp]
+  (if config/has-ssl?
+    (wrap-ssl-redirect resp)
+    resp))
 
 (defn valid-session-wrapper?
   "given a request, determine if the user-id has a valid session"
@@ -466,8 +471,9 @@
 
 ;; used for running dashboard server independently of app server
 (defroutes handler-routes
-  (context "/dashboard" []
-           dashboard-routes)
+  (wrap-force-ssl
+   (context "/dashboard" []
+            dashboard-routes))
   (route/resources "/"))
 
 (def handler
