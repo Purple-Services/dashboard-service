@@ -431,20 +431,29 @@
   (GET "/status-stats-csv" []
        (response
         (let [stats-file (java.io.File. "stats.csv")]
-          (if (> (.length stats-file) 0)
-            {:processing? false
-             :timestamp (quot (.lastmodified stats-file)
+          (cond
+            ;; stats file doesn't exist
+            (not (.exists stats-file))
+            {:status "non-existent"}
+            ;; stats file exists, but processing
+            (= (.length stats-file) 0)
+            {:status "processing"}
+            ;; stats file exists, not processing
+            (> (.length stats-file) 0)
+            {:status "ready"
+             :timestamp (quot (.lastModified stats-file)
                               1000)}
-            {:processing? true}))))
+            ;; unknown error
+            :else {:status "unknown error"}))))
   ;; generate analytics file
   (GET "/generate-stats-csv" []
        (do (future (analytics/gen-stats-csv))
            (response {:success true})))
   (GET "/download-stats-csv" []
        (-> (response (java.io.File. "stats.csv"))
-           (header "content-type:"
+           (header "Content-Type:"
                    "text/csv; name=\"stats.csv\"")
-           (header "content-disposition"
+           (header "Content-Disposition"
                    "attachment; filename=\"stats.csv\"")))
   (route/resources "/"))
 
