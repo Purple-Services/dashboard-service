@@ -90,7 +90,7 @@
   (with-open [out-file (io/writer "stats.csv")]
     (csv/write-csv
      out-file
-     (let [db-conn @conn
+     (let [db-conn (conn)
            dates (map joda->ymd
                       (take-while #(time/before? % (time/now))
                                   (periodic/periodic-seq  ;; Apr 10th

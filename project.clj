@@ -11,6 +11,7 @@
                  [enlive "1.1.5"]
                  [ring/ring-jetty-adapter "1.4.0"]
                  [ring/ring-json "0.4.0"]
+                 [ring/ring-ssl "0.2.1"]
                  [ring-cors "0.1.7"]
                  [common "1.0.0-SNAPSHOT"]
                  [opt "0.1.0-SNAPSHOT"]]

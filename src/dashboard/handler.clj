@@ -37,11 +37,16 @@
             [ring.middleware.cookies :refer [wrap-cookies]]
             [ring.middleware.json :refer [wrap-json-body wrap-json-response]]
             [ring.util.response :refer [header set-cookie response redirect]]
-            [ring.middleware.cors :refer [wrap-cors]]))
+            [ring.middleware.cors :refer [wrap-cors]]
+            [ring.middleware.ssl :refer [wrap-ssl-redirect]]))
 
 (defn wrap-page [resp]
   (header resp "content-type" "text/html; charset=utf-8"))
 
+(defn wrap-force-ssl [resp]
+  (if config/has-ssl?
+    (wrap-ssl-redirect resp)
+    resp))
 
 (defn valid-session-wrapper?
   "given a request, determine if the user-id has a valid session"
@@ -431,20 +436,29 @@
   (GET "/status-stats-csv" []
        (response
         (let [stats-file (java.io.File. "stats.csv")]
-          (if (> (.length stats-file) 0)
-            {:processing? false
-             :timestamp (quot (.lastmodified stats-file)
+          (cond
+            ;; stats file doesn't exist
+            (not (.exists stats-file))
+            {:status "non-existent"}
+            ;; stats file exists, but processing
+            (= (.length stats-file) 0)
+            {:status "processing"}
+            ;; stats file exists, not processing
+            (> (.length stats-file) 0)
+            {:status "ready"
+             :timestamp (quot (.lastModified stats-file)
                               1000)}
-            {:processing? true}))))
+            ;; unknown error
+            :else {:status "unknown error"}))))
   ;; generate analytics file
   (GET "/generate-stats-csv" []
        (do (future (analytics/gen-stats-csv))
            (response {:success true})))
   (GET "/download-stats-csv" []
        (-> (response (java.io.File. "stats.csv"))
-           (header "content-type:"
+           (header "Content-Type:"
                    "text/csv; name=\"stats.csv\"")
-           (header "content-disposition"
+           (header "Content-Disposition"
                    "attachment; filename=\"stats.csv\"")))
   (route/resources "/"))
 
@@ -457,8 +471,9 @@
 
 ;; used for running dashboard server independently of app server
 (defroutes handler-routes
-  (context "/dashboard" []
-           dashboard-routes)
+  (wrap-force-ssl
+   (context "/dashboard" []
+            dashboard-routes))
   (route/resources "/"))
 
 (def handler
