@@ -1,6 +1,6 @@
 (defproject dashboard "1.0.0-SNAPSHOT"
-  :description "Dashboard Service"
-  :url "http://purpledelivery.com"
+  :description "Dashboard Service API that the dashboard client connects to."
+  :url "https://dash.purpleapp.com"
   :dependencies [[org.clojure/clojure "1.7.0"]
                  [org.clojure/data.csv "0.1.3"]
                  [org.clojure/algo.generic "0.1.2"]
