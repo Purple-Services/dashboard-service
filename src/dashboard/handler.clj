@@ -61,19 +61,26 @@
     (users/valid-session? (conn) user-id token)))
 
 (def login-rules
-  [{:pattern #".*/dashboard/login" ; this route must always be allowed access
+  [
+   {:pattern #".*/css/.*" ; this route must always be allowed access
     :handler (constantly true)}
-   {:pattern #".*/dashboard/logout" ; this route must always be allowed access
+   {:pattern #".*/js/.*" ; this route must always be allowed access
     :handler (constantly true)}
-   {:pattern #".*/dashboard(/.*|$)"
+   {:pattern #".*/fonts/.*" ; this route must always be allowed access
+    :handler (constantly true)}
+   {:pattern #".*/login" ; this route must always be allowed access
+    :handler (constantly true)}
+   {:pattern #".*/logout" ; this route must always be allowed access
+    :handler (constantly true)}
+   {:pattern #".*(/.*|$)"
     :handler valid-session-wrapper?
-    :redirect "/dashboard/login"}])
+    :redirect "/login"}])
 
 ;; if the route is omitted, it is accessible by all dashboard users
 ;; url and method must be given, if one is missing, the route will be allowed!
 ;; login/logout should be unprotected!
 ;;
-;; these routes are organized to match those under /dashboard
+;; these routes are organized to match dashboard-routes
 ;; and follow the same conventions.
 ;;
 ;; a user who can access everything would have the following permissions:
@@ -84,98 +91,98 @@
 (def dashboard-uri-permissions
   [
    ;;!! main dash
-   {:uri "/dashboard/"
+   {:uri "/"
     :method "GET"
     :permissions ["view-dash"]}
-   {:uri "/dashboard"
+   {:uri ""
     :method "GET"
     :permissions ["view-dash"]}
-   {:uri "/dashboard/dash-app"
+   {:uri "/dash-app"
     :method "GET"
     :permissions ["view-dash"]}
-   {:uri "/dashboard/permissions"
+   {:uri "/permissions"
     :method "GET"
     :permissions ["view-dash"]}
    ;;!! dash maps
-   {:uri "/dashboard/dash-map-orders"
+   {:uri "/dash-map-orders"
     :method "GET"
     :permissions ["view-orders" "view-zones"]}
-   {:uri "/dashboard/dash-map-couriers"
+   {:uri "/dash-map-couriers"
     :method "GET"
     :permissions ["view-orders" "view-couriers" "view-zones"]}
    ;;!! couriers
-   {:uri "/dashboard/courier/:id"
+   {:uri "/courier/:id"
     :method "GET"
     :permissions ["view-couriers"]}
-   {:uri "/dashboard/courier"
+   {:uri "/courier"
     :method "POST"
     :permissions ["edit-couriers"]}
-   {:uri "/dashboard/couriers"
+   {:uri "/couriers"
     :method "POST"
     :permissions ["view-couriers"]}
    ;;!! users
-   {:uri "/dashboard/users"
+   {:uri "/users"
     :method "GET"
     :permissions ["view-users" "view-orders"]}
-   {:uri "/dashboard/users-count"
+   {:uri "/users-count"
     :method "GET"
     :permissions ["view-users" "view-orders"]}
-   {:uri "/dashboard/send-push-to-all-active-users"
+   {:uri "/send-push-to-all-active-users"
     :method "POST"
     :permissions ["view-users" "send-push"]}
-   {:uri "/dashboard/send-push-to-users-list"
+   {:uri "/send-push-to-users-list"
     :method "POST"
     :permissions ["view-users" "send-push"]}
    ;;!! coupons
-   {:uri "/dashboard/coupon/:code"
+   {:uri "/coupon/:code"
     :method "GET"
     :permissions ["view-coupons"]}
-   {:uri "/dashboard/coupon"
+   {:uri "/coupon"
     :method "PUT"
     :permissions ["edit-coupons"]}
-   {:uri "/dashboard/coupon"
+   {:uri "/coupon"
     :method "POST"
     :permissions ["create-coupons"]}
-   {:uri "/dashboard/coupons"
+   {:uri "/coupons"
     :method "GET"
     :permissions ["view-coupons"]}
    ;;!! zones
-   {:uri "/dashboard/zone/:id"
+   {:uri "/zone/:id"
     :method "GET"
     :permissions ["view-zones"]}
-   {:uri "/dashboard/zone"
+   {:uri "/zone"
     :method "PUT"
     :permissions ["edit-zones"]}
-   {:uri "/dashboard/zones"
+   {:uri "/zones"
     :method "GET"
     :permissions ["view-zones"]}
-   {:uri "/dashboard/zctas"
+   {:uri "/zctas"
     :method "POST"
     :permissions ["view-zones"]}
    ;;!! orders
-   {:uri "/dashboard/order"
+   {:uri "/order"
     :method "POST"
     :permissions ["view-orders"]}
-   {:uri "/dashboard/cancel-order"
+   {:uri "/cancel-order"
     :method "POST"
     :permissions ["edit-orders"]}
-   {:uri "/dashboard/update-status"
+   {:uri "/update-status"
     :method "POST"
     :permissions ["edit-orders"]}
-   {:uri "/dashboard/assign-order"
+   {:uri "/assign-order"
     :method "POST"
     :permissions ["edit-orders"]}
-   {:uri "/dashboard/orders-since-date"
+   {:uri "/orders-since-date"
     :method "POST"
     :permissions ["view-orders"]}
    ;;!! analytics
-   {:uri "/dashboard/status-stats-csv"
+   {:uri "/status-stats-csv"
     :method "GET"
     :permissions ["download-stats"]}
-   {:uri "/dashboard/generate-stats-csv"
+   {:uri "/generate-stats-csv"
     :method "GET"
     :permissions ["download-stats"]}
-   {:uri "/dashboard/download-stats-csv"
+   {:uri "/download-stats-csv"
     :method "GET"
     :permissions ["download-stats"]}
    ])
@@ -215,7 +222,7 @@
    :body (str "you do not have permission to access " (:uri request))})
 
 (def access-rules
-  [{:pattern #".*/dashboard(/.*|$)"
+  [{:pattern #".*(/.*|$)"
     :handler (partial allowed? dashboard-uri-permissions)
     :on-error on-error}])
 
@@ -259,7 +266,7 @@
                         (or (get headers "x-forwarded-for")
                             remote-addr)))))
   (GET "/logout" []
-       (-> (redirect "/dashboard/login")
+       (-> (redirect "/login")
            (set-cookie "token" "null" {:max-age -1})
            (set-cookie "user-id" "null" {:max-age -1})))
   ;;!! dash maps
@@ -462,23 +469,10 @@
                    "attachment; filename=\"stats.csv\"")))
   (route/resources "/"))
 
-(defn dashboard []
-  (->
-   dashboard-routes
-   (wrap-access-rules {:rules access-rules})
-   (wrap-access-rules {:rules login-rules})
-   (wrap-cookies)))
-
-;; used for running dashboard server independently of app server
-(defroutes handler-routes
-  (wrap-force-ssl
-   (context "/dashboard" []
-            dashboard-routes))
-  (route/resources "/"))
-
 (def handler
   (->
-   handler-routes
+   dashboard-routes
+   (wrap-force-ssl)
    (wrap-cors :access-control-allow-origin [#".*"]
               :access-control-allow-methods [:get :put :post :delete])
    (wrap-access-rules {:rules access-rules})
