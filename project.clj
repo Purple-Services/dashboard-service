@@ -21,7 +21,7 @@
          :port 3001
          :auto-reload? true
          :auth-refresh? false
-         :browser-uri "dashboard/"
+         :browser-uri "/"
          :reload-paths ["src" "resources" "checkouts"]}
   :aws {:beanstalk {:environments [{:name "dashboard-prod-env"}]
                     :s3-bucket "leinbeanstalkpurple"
