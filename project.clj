@@ -14,10 +14,14 @@
                  [ring-cors "0.1.7"]
                  [common "1.0.0-SNAPSHOT"]
                  [opt "0.1.0-SNAPSHOT"]]
-  :plugins [[lein-ring "0.9.7"]]
+  :plugins [[lein-ring "0.9.7"]
+            [lein-beanstalk "0.2.7"]]
   :ring {:handler dashboard.handler/handler
          :port 3001
          :auto-reload? true
          :auth-refresh? false
          :browser-uri "dashboard/"
-         :reload-paths ["src" "resources" "checkouts"]})
+         :reload-paths ["src" "resources" "checkouts"]}
+  :aws {:beanstalk {:environments [{:name "dashboard-service-env"}]
+                    :s3-bucket "leinbeanstalkpurple"
+                    :region "us-west-2"}})
