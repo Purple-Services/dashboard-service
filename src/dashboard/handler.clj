@@ -61,7 +61,8 @@
     (users/valid-session? (conn) user-id token)))
 
 (def login-rules
-  [
+  [{:pattern #"/ok" ; this route must always be allowed access
+    :handler (constantly true)}
    {:pattern #".*/css/.*" ; this route must always be allowed access
     :handler (constantly true)}
    {:pattern #".*/js/.*" ; this route must always be allowed access
@@ -467,6 +468,7 @@
                    "text/csv; name=\"stats.csv\"")
            (header "Content-Disposition"
                    "attachment; filename=\"stats.csv\"")))
+  (GET "/ok" [] (response {:success true}))
   (route/resources "/"))
 
 (def handler
