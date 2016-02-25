@@ -468,13 +468,15 @@
                    "text/csv; name=\"stats.csv\"")
            (header "Content-Disposition"
                    "attachment; filename=\"stats.csv\"")))
-  (GET "/ok" [] (response {:success true}))
   (route/resources "/"))
+
+(defroutes all-routes
+  (wrap-force-ssl dashboard-routes)
+  (GET "/ok" [] (response {:success true})))
 
 (def handler
   (->
-   dashboard-routes
-   (wrap-force-ssl)
+   all-routes
    (wrap-cors :access-control-allow-origin [#".*"]
               :access-control-allow-methods [:get :put :post :delete])
    (wrap-access-rules {:rules access-rules})
