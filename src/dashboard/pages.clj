@@ -44,7 +44,7 @@
 
 (deftemplate dash-app-template "templates/dashmap.html"
   [x]
-  [:title] (content "Purple - Dashboard App")
+  [:title] (content "Dashboard - Purple")
 
   [:#pikaday-css] unwrap
 
