@@ -6,6 +6,21 @@
             [common.users :refer [send-push]]
             [common.util :refer [in? sns-publish sns-client]]))
 
+(def users-select
+  [:id :name :email :phone_number :os
+   :app_version :stripe_default_card
+   :stripe_cards :sift_score
+   :arn_endpoint :timestamp_created])
+
+(defn process-users
+  "Process a coll of users to be included as a JSON response"
+  [users]
+  (map #(assoc % :timestamp_created
+               (/ (.getTime
+                   (:timestamp_created %))
+                  1000))
+       users))
+
 (defn dash-users
   "Return all users who are either couriers or a user who has placed an
    order"
@@ -22,11 +37,7 @@
                                {}
                                :append " LIMIT 100")
         users (!select db-conn "users"
-                       [:id :name :email :phone_number :os
-                        :app_version :stripe_default_card
-                        :stripe_cards
-                        :sift_score
-                        :arn_endpoint :timestamp_created]
+                       users-select
                        {}
                        :custom-where
                        (let [customer-ids
@@ -36,11 +47,7 @@
                                                (concat customer-ids
                                                        courier-ids)))
                               "\")")))]
-    (map #(assoc % :timestamp_created
-                 (/ (.getTime
-                     (:timestamp_created %))
-                    1000))
-         users)))
+    (process-users users)))
 
 (defn send-push-to-all-active-users
   [db-conn message]
@@ -63,3 +70,15 @@
                                        (apply str))
                                   "\")"))))
       {:success true}))
+
+(defn search-users
+  "Search users by term"
+  [db-conn term]
+  (let [users (!select db-conn "users"
+                       users-select
+                       {}
+                       :custom-where
+                       (str "`id` LIKE '%" term "%' "
+                            "OR `email` LIKE '%" term "%' "
+                            "OR `name` LIKE  '%" term "%'"))]
+    (process-users users)))

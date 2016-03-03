@@ -29,6 +29,7 @@
                                       orders-since-date]]
             [dashboard.pages :as pages]
             [dashboard.users :refer [dash-users
+                                     search-users
                                      send-push-to-all-active-users
                                      send-push-to-users-list]]
             [dashboard.zones :refer [get-zone-by-id
@@ -325,6 +326,10 @@
            (send-push-to-users-list (conn)
                                     (:message b)
                                     (:user-ids b)))))
+  (GET "/users/search/:term" [term]
+       (response
+        (into []
+              (search-users (conn) term))))
   ;;!! coupons
   ;; get a coupon by code
   (GET "/coupon/:code" [code]
