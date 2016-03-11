@@ -4,5 +4,5 @@
             ))
 
 (deftest a-test
-  (testing "always true test"
+  (testing "always true test."
     (is (= 1 1))))
