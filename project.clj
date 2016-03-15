@@ -1,6 +1,6 @@
 (defproject dashboard "1.0.0-SNAPSHOT"
-  :description "Dashboard Service"
-  :url "http://purpledelivery.com"
+  :description "Dashboard Service API that the dashboard client connects to."
+  :url "https://dash.purpleapp.com"
   :dependencies [[org.clojure/clojure "1.7.0"]
                  [org.clojure/data.csv "0.1.3"]
                  [org.clojure/algo.generic "0.1.2"]
@@ -21,8 +21,8 @@
          :port 3001
          :auto-reload? true
          :auth-refresh? false
-         :browser-uri "dashboard/"
+         :browser-uri "/"
          :reload-paths ["src" "resources" "checkouts"]}
-  :aws {:beanstalk {:environments [{:name "dashboard-service-env"}]
+  :aws {:beanstalk {:environments [{:name "dashboard-prod-env"}]
                     :s3-bucket "leinbeanstalkpurple"
                     :region "us-west-2"}})

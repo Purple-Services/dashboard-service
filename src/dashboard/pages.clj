@@ -40,11 +40,11 @@
   []
   (apply str (dash-login-template
               {:base-url
-               (str config/base-url "dashboard/")})))
+               (str config/base-url)})))
 
 (deftemplate dash-app-template "templates/dashmap.html"
   [x]
-  [:title] (content "Purple - Dashboard App")
+  [:title] (content "Dashboard - Purple")
 
   [:#pikaday-css] unwrap
 
@@ -99,7 +99,7 @@
   []
   (apply str (dash-app-template
               {:base-url
-               (str config/base-url "dashboard/")})))
+               (str config/base-url)})))
 
 (deftemplate dash-map-template "templates/dashmap.html"
   [x]
@@ -126,6 +126,6 @@
 
 (defn dash-map
   [& {:keys [read-only courier-manager callback-s]}]
-  (apply str (dash-map-template {:base-url (str  config/base-url "dashboard/")
+  (apply str (dash-map-template {:base-url (str config/base-url)
                                  :read-only read-only
                                  :callback-s callback-s })))

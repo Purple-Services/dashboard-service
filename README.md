@@ -1,4 +1,4 @@
-# dashboard
+# Dashboard Service
 Dashboard API + logic specific to dashboard.
 
 ## Runing the server
@@ -38,6 +38,12 @@ The lein-ring plugin has its own entry in project.clj. The server port must be
 different from the default port of 3000 that the app-service server runs on
 if both servers are needed for development. To be on the safe side, run the
 dashboard service on port 3001.
+
+You can start the server for development with:
+
+```
+lein ring server
+```
 
 ## Log in
 

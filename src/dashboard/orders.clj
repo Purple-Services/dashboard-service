@@ -24,7 +24,7 @@
             :payment_info]
            {}
            :custom-where
-           (str "timestamp_created > "
+           (str "timestamp_created >= "
                 (if unix-epoch?
                   (str "FROM_UNIXTIME(" date ")")
                   (str "'" date "'")))))
