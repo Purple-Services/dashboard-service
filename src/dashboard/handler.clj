@@ -17,6 +17,7 @@
             [dashboard.analytics :as analytics]
             [dashboard.coupons :refer [create-standard-coupon!
                                        coupons
+                                       coupon
                                        update-standard-coupon!]]
             [dashboard.couriers :refer [get-by-id include-lateness
                                         update-courier-zones!]]
@@ -29,9 +30,11 @@
                                       orders-since-date]]
             [dashboard.pages :as pages]
             [dashboard.users :refer [dash-users
+                                     process-user
                                      search-users
                                      send-push-to-all-active-users
-                                     send-push-to-users-list]]
+                                     send-push-to-users-list
+                                     update-user!]]
             [dashboard.zones :refer [get-zone-by-id
                                      read-zone-strings
                                      validate-and-update-zone!]]
@@ -307,6 +310,19 @@
                            (users/include-user-data (conn))
                            (include-lateness (conn)))})))
   ;;!! users
+  ;; get a user by id
+  (GET "/user/:id" [id]
+       (response
+        (into []
+              (->>
+               (users/get-user-by-id (conn) id)
+               process-user
+               list))))
+  ;; edit an existing user
+  (PUT "/user" {body :body}
+       (let [b (keywordize-keys body)]
+         (response
+          (update-user! (conn) b))))
   (GET "/users" []
        (response
         (into []
@@ -331,11 +347,11 @@
         (into []
               (search-users (conn) term))))
   ;;!! coupons
-  ;; get a coupon by code
-  (GET "/coupon/:code" [code]
+  ;; get a coupon by id
+  (GET "/coupon/:id" [id]
        (response
         (into []
-              (->> (coupons/get-coupon-by-code (conn) code)
+              (->> (coupon (conn) id)
                    convert-timestamp
                    list))))
   ;; edit an existing coupon
