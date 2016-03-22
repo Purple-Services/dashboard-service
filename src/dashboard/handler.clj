@@ -316,13 +316,20 @@
         (into []
               (->>
                (users/get-user-by-id (conn) id)
-               process-user
+               (process-user (!select
+                              (conn) "dashboard_users" [:email :id] {}))
                list))))
   ;; edit an existing user
-  (PUT "/user" {body :body}
-       (let [b (keywordize-keys body)]
+  (PUT "/user" [:as {body :body
+                     cookies :cookies}]
+       (let [b (keywordize-keys body)
+             admin-id (-> (keywordize-keys cookies)
+                      :user-id
+                      :value)]
          (response
-          (update-user! (conn) b))))
+          (update-user! (conn)
+                        (assoc b
+                               :admin_id admin-id)))))
   (GET "/users" []
        (response
         (into []
