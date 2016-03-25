@@ -1,13 +1,16 @@
 (ns dashboard.orders
-  (:require [clojure.algo.generic.functor :refer [fmap]]
+  (:require [bouncer.core :as b]
+            [bouncer.validators :as v]
+            [clojure.algo.generic.functor :refer [fmap]]
             [clojure.string :as s]
             [clojure.walk :refer [stringify-keys]]
-            [common.db :refer [conn !select]]
+            [common.db :refer [conn !select !update]]
             [opt.planner :refer [compute-distance]]
             [common.users :as users]
             [common.util :refer [in? map->java-hash-map split-on-comma]]
             [common.zones :refer [get-all-zones-from-db
-                                  get-zones]]))
+                                  get-zones]]
+            [common.orders :refer [get-by-id]]))
 
 (defn orders-since-date
   "Get all orders since date. A blank date will return all orders. When
@@ -21,7 +24,7 @@
             :target_time_start :target_time_end :coupon_code :event_log
             :paid :stripe_charge_id :special_instructions
             :number_rating :text_rating
-            :payment_info]
+            :payment_info :notes :cancel_reason]
            {}
            :custom-where
            (str "timestamp_created >= "
@@ -158,3 +161,27 @@
                                  (into {} (get this-dist-map "etas")))))
 
          orders)))
+
+(def order-validations
+  {:notes [[v/string :message "Note must be a string!"]
+           [v/string :message "Cancellation reason must be a string!"]
+           ]})
+
+
+(defn update-order!
+  "Update fields of an order"
+  [db-conn order]
+  (if (b/valid? order order-validations)
+    (let [{:keys [notes cancel_reason id]} order
+          db-order (get-by-id db-conn id)
+          update-result
+          (!update db-conn "orders"
+                   (assoc db-order
+                          :notes notes
+                          :cancel_reason cancel_reason)
+                   {:id (:id db-order)})]
+      (if (:success update-result)
+        (assoc update-result :id (:id db-order))
+        update-result))
+    {:success false
+     :validation (b/validate order order-validations)}))

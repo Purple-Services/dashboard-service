@@ -26,7 +26,8 @@
                                       include-vehicle
                                       include-was-late
                                       include-zone-info
-                                      orders-since-date]]
+                                      orders-since-date
+                                      update-order!]]
             [dashboard.pages :as pages]
             [dashboard.users :refer [dash-users
                                      search-users
@@ -162,9 +163,12 @@
     :method "POST"
     :permissions ["view-zones"]}
    ;;!! orders
-   {:uri "/order"
-    :method "POST"
+   {:uri "/order/:id"
+    :method "GET"
     :permissions ["view-orders"]}
+   {:uri "/order"
+    :method "PUT"
+    :permissions ["edit-orders"]}
    {:uri "/cancel-order"
     :method "POST"
     :permissions ["edit-orders"]}
@@ -391,20 +395,24 @@
   ;;!! orders
   ;; given an order id, get the detailed information for that
   ;; order
-  (POST "/order"  {body :body}
+  (GET "/order/:id"  [id]
         (response
-         (let [b (keywordize-keys body)]
-           (if (:id b)
+         (let [order (orders/get-by-id (conn) id)]
+           (if ((comp not empty?) order)
              (into []
                    (->>
-                    [(orders/get-by-id (conn)
-                                       (:id b))]
+                    [order]
                     (include-user-name-phone-and-courier
                      (conn))
                     (include-vehicle (conn))
                     (include-zone-info (conn))
                     (include-eta (conn))
                     (include-was-late)))))))
+  ;; edit an order
+  (PUT "/order" {body :body}
+       (let [b (keywordize-keys body)]
+         (response
+          (update-order! (conn) b))))
   ;; cancel the order
   (POST "/cancel-order" {body :body}
         (response
