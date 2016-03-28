@@ -44,7 +44,7 @@
   [db-conn]
   (let [all-couriers (->> (!select db-conn "couriers" ["*"] {})
                           ;; remove chriscourier@test.com
-                          (remove #(in? ["9eadx6i2wccjui1lebbr"] (:id %))))
+                          (remove #(in? ["9eadx6i2wCCjUI1leBBr"] (:id %))))
         couriers-by-id (into {} (map (juxt (comp keyword :id) identity)
                                      all-couriers))
         courier-ids (distinct (map :id all-couriers))
@@ -52,14 +52,14 @@
                                "orders"
                                ["*"]
                                {}
-                               :append " limit 100")
+                               :append " LIMIT 100")
         users (!select db-conn "users"
                        users-select
                        {}
                        :custom-where
                        (let [customer-ids
                              (distinct (map :user_id recent-orders))]
-                         (str "id in (\""
+                         (str "id IN (\""
                               (s/join "\",\"" (distinct
                                                (concat customer-ids
                                                        courier-ids)))
@@ -92,14 +92,16 @@
 (defn search-users
   "Search users by term"
   [db-conn term]
-  (let [users (!select db-conn "users"
+  (let [escaped-term (mysql-escape-str term)
+        admins (!select db-conn "dashboard_users" [:email :id] {})
+        users (!select db-conn "users"
                        users-select
                        {}
                        :custom-where
-                       (str "`id` LIKE '%" term "%' "
-                            "OR `email` LIKE '%" term "%' "
-                            "OR `name` LIKE  '%" term "%'"))]
-    (map process-user users)))
+                       (str "`id` LIKE '%" escaped-term "%' "
+                            "OR `email` LIKE '%" escaped-term "%' "
+                            "OR `name` LIKE  '%" escaped-term "%'"))]
+    (map #(process-user % admins) users)))
 
 (def user-validations
   {:referral_gallons [
