@@ -17,7 +17,6 @@
    :referral_gallons :admin_event_log])
 
 (defn process-admin-log
-  "Process the admin_event_log col of a user using a list of admins"
   [log admins]
   (let [edn-log (edn/read-string log)
         admin-ids  (filter (comp not nil?)
@@ -28,7 +27,7 @@
                   edn-log))))
 
 (defn process-user
-  "Process a users to be included as a JSON response"
+  "Process a user to be included as a JSON response"
   [user admins]
   (assoc user
          :timestamp_created
@@ -136,9 +135,7 @@
                            :action "adjust_referral_gallons"
                            :previous_value (:referral_gallons db-user)
                            :new_value referral_gallons
-                           :comment (if referral_comment
-                                      referral_comment
-                                      "admin adjusted")}))}
+                           :comment (or referral_comment "")}))}
                    {:id (:id db-user)})
           (assoc update-result :id (:id db-user)))
         update-result))
