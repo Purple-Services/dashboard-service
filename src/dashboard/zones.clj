@@ -4,7 +4,7 @@
             [clojure.string :as s]
             [clojure.walk :refer [stringify-keys]]
             [common.util :refer [split-on-comma five-digit-zip-code
-                                        in?]]
+                                 in?]]
             [common.db :refer [!select !update]]))
 
 (defn read-zone-strings

@@ -16,8 +16,8 @@
             [compojure.route :as route]
             [dashboard.analytics :as analytics]
             [dashboard.coupons :refer [create-standard-coupon!
-                                       coupons
-                                       coupon
+                                       get-coupons
+                                       get-coupon
                                        update-standard-coupon!]]
             [dashboard.couriers :refer [get-by-id include-lateness
                                         update-courier-zones!]]
@@ -314,7 +314,7 @@
   (GET "/user/:id" [id]
        (response
         (into []
-              (->>
+              (->
                (users/get-user-by-id (conn) id)
                (process-user (!select
                               (conn) "dashboard_users" [:email :id] {}))
@@ -324,8 +324,8 @@
                      cookies :cookies}]
        (let [b (keywordize-keys body)
              admin-id (-> (keywordize-keys cookies)
-                      :user-id
-                      :value)]
+                          :user-id
+                          :value)]
          (response
           (update-user! (conn)
                         (assoc b
@@ -358,7 +358,7 @@
   (GET "/coupon/:id" [id]
        (response
         (into []
-              (->> (coupon (conn) id)
+              (->> (get-coupon (conn) id)
                    convert-timestamp
                    list))))
   ;; edit an existing coupon
@@ -375,7 +375,7 @@
   (GET "/coupons" []
        (response
         (into []
-              (-> (coupons (conn))
+              (-> (get-coupons (conn))
                   (convert-timestamps)))))
   ;;!! zones
   ;; get a zone by its id

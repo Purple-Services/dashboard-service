@@ -6,12 +6,12 @@
             [common.db :refer [conn !insert !select !update]]
             [common.util :refer [rand-str-alpha-num split-on-comma]]))
 
-(defn coupons
+(defn get-coupons
   "Retrieve all coupons"
   [db-conn]
   (!select db-conn "coupons" ["*"] {:type "standard"}))
 
-(defn coupon
+(defn get-coupon
   "Retrieve coupon by id"
   [db-conn id]
   (first (!select db-conn "coupons" ["*"] {:id id})))
@@ -50,15 +50,16 @@
   (if (b/valid? new-coupon new-coupon-validations)
     (let [{:keys [code value expiration_time only_for_first_orders]} new-coupon
           id (rand-str-alpha-num 20)
-          insert-result (!insert db-conn "coupons" {:id id
-                                       :code (format-coupon-code code)
-                                       :value (* value -1)
-                                       :expiration_time expiration_time
-                                       :only_for_first_orders
-                                       (if only_for_first_orders 1 0)
-                                       :type "standard"
-                                       :used_by_license_plates ""
-                                       :used_by_user_ids ""})]
+          insert-result (!insert db-conn "coupons"
+                                 {:id id
+                                  :code (format-coupon-code code)
+                                  :value (* value -1)
+                                  :expiration_time expiration_time
+                                  :only_for_first_orders
+                                  (if only_for_first_orders 1 0)
+                                  :type "standard"
+                                  :used_by_license_plates ""
+                                  :used_by_user_ids ""})]
       (if (:success insert-result)
         (assoc insert-result :id id)
         insert-result))
