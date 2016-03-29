@@ -89,9 +89,9 @@
 ;; and follow the same conventions.
 ;;
 ;; a user who can access everything would have the following permissions:
-;; #{"view-dash","view-couriers","edit-couriers","view-users","send-push",
-;;  "view-coupons","edit-coupons","create-coupons","view-zones","edit-zones",
-;;  "view-orders","edit-orders","download-stats"}
+;; #{"view-dash","view-couriers","edit-couriers","view-users","edit-users,
+;;   "send-push","view-coupons","edit-coupons","create-coupons","view-zones",
+;;   "edit-zones", "view-orders","edit-orders","download-stats"}
 ;;
 (def dashboard-uri-permissions
   [
@@ -126,6 +126,9 @@
     :method "POST"
     :permissions ["view-couriers"]}
    ;;!! users
+   {:uri "/user"
+    :method "PUT"
+    :permissions ["view-users" "edit-users"]}
    {:uri "/users"
     :method "GET"
     :permissions ["view-users" "view-orders"]}
