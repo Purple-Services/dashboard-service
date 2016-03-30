@@ -26,6 +26,7 @@
                                       include-vehicle
                                       include-was-late
                                       include-zone-info
+                                      admin-event-log-str->edn
                                       orders-since-date
                                       update-order!]]
             [dashboard.pages :as pages]
@@ -396,23 +397,29 @@
   ;; given an order id, get the detailed information for that
   ;; order
   (GET "/order/:id"  [id]
-        (response
-         (let [order (orders/get-by-id (conn) id)]
-           (if ((comp not empty?) order)
-             (into []
-                   (->>
-                    [order]
-                    (include-user-name-phone-and-courier
-                     (conn))
-                    (include-vehicle (conn))
-                    (include-zone-info (conn))
-                    (include-eta (conn))
-                    (include-was-late)))))))
+       (response
+        (let [order (orders/get-by-id (conn) id)]
+          (if ((comp not empty?) order)
+            (into []
+                  (->>
+                   [order]
+                   (include-user-name-phone-and-courier
+                    (conn))
+                   (include-vehicle (conn))
+                   (include-zone-info (conn))
+                   (include-eta (conn))
+                   (include-was-late)
+                   (admin-event-log-str->edn)))))))
   ;; edit an order
-  (PUT "/order" {body :body}
-       (let [b (keywordize-keys body)]
+  (PUT "/order" [:as {body :body
+                      cookies :cookies}]
+       (let [order (keywordize-keys body)
+             admin-id (-> (keywordize-keys cookies)
+                          :user-id
+                          :value)]
          (response
-          (update-order! (conn) b))))
+          (update-order! (conn) (assoc order
+                                       :admin-id admin-id)))))
   ;; cancel the order
   (POST "/cancel-order" {body :body}
         (response
@@ -452,7 +459,8 @@
                       (conn))
                      (include-vehicle (conn))
                      (include-zone-info (conn))
-                     (include-was-late))))))
+                     (include-was-late)
+                     (admin-event-log-str->edn))))))
   ;;!! analytics
   (GET "/status-stats-csv" []
        (response
