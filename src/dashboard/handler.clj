@@ -27,7 +27,9 @@
                                       include-vehicle
                                       include-was-late
                                       include-zone-info
-                                      orders-since-date]]
+                                      admin-event-log-str->edn
+                                      orders-since-date
+                                      update-order!]]
             [dashboard.pages :as pages]
             [dashboard.users :refer [dash-users
                                      process-user
@@ -168,9 +170,12 @@
     :method "POST"
     :permissions ["view-zones"]}
    ;;!! orders
-   {:uri "/order"
-    :method "POST"
+   {:uri "/order/:id"
+    :method "GET"
     :permissions ["view-orders"]}
+   {:uri "/order"
+    :method "PUT"
+    :permissions ["edit-orders"]}
    {:uri "/cancel-order"
     :method "POST"
     :permissions ["edit-orders"]}
@@ -417,20 +422,30 @@
   ;;!! orders
   ;; given an order id, get the detailed information for that
   ;; order
-  (POST "/order"  {body :body}
-        (response
-         (let [b (keywordize-keys body)]
-           (if (:id b)
-             (into []
-                   (->>
-                    [(orders/get-by-id (conn)
-                                       (:id b))]
-                    (include-user-name-phone-and-courier
-                     (conn))
-                    (include-vehicle (conn))
-                    (include-zone-info (conn))
-                    (include-eta (conn))
-                    (include-was-late)))))))
+  (GET "/order/:id"  [id]
+       (response
+        (let [order (orders/get-by-id (conn) id)]
+          (if ((comp not empty?) order)
+            (into []
+                  (->>
+                   [order]
+                   (include-user-name-phone-and-courier
+                    (conn))
+                   (include-vehicle (conn))
+                   (include-zone-info (conn))
+                   (include-eta (conn))
+                   (include-was-late)
+                   (admin-event-log-str->edn)))))))
+  ;; edit an order
+  (PUT "/order" [:as {body :body
+                      cookies :cookies}]
+       (let [order (keywordize-keys body)
+             admin-id (-> (keywordize-keys cookies)
+                          :user-id
+                          :value)]
+         (response
+          (update-order! (conn) (assoc order
+                                       :admin-id admin-id)))))
   ;; cancel the order
   (POST "/cancel-order" {body :body}
         (response
@@ -470,7 +485,8 @@
                       (conn))
                      (include-vehicle (conn))
                      (include-zone-info (conn))
-                     (include-was-late))))))
+                     (include-was-late)
+                     (admin-event-log-str->edn))))))
   ;;!! analytics
   (GET "/status-stats-csv" []
        (response

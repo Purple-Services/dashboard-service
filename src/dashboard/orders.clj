@@ -1,13 +1,18 @@
 (ns dashboard.orders
-  (:require [clojure.algo.generic.functor :refer [fmap]]
+  (:require [bouncer.core :as b]
+            [bouncer.validators :as v]
+            [clojure.algo.generic.functor :refer [fmap]]
+            [clojure.edn :as edn]
             [clojure.string :as s]
             [clojure.walk :refer [stringify-keys]]
-            [common.db :refer [conn !select]]
+            [common.db :refer [conn !select !update]]
             [opt.planner :refer [compute-distance]]
             [common.users :as users]
             [common.util :refer [in? map->java-hash-map split-on-comma]]
             [common.zones :refer [get-all-zones-from-db
-                                  get-zones]]))
+                                  get-zones]]
+            [common.orders :refer [get-by-id]]))
+
 
 (defn orders-since-date
   "Get all orders since date. A blank date will return all orders. When
@@ -21,7 +26,7 @@
             :target_time_start :target_time_end :coupon_code :event_log
             :paid :stripe_charge_id :special_instructions
             :number_rating :text_rating
-            :payment_info]
+            :payment_info :notes :admin_event_log]
            {}
            :custom-where
            (str "timestamp_created >= "
@@ -158,3 +163,73 @@
                                  (into {} (get this-dist-map "etas")))))
 
          orders)))
+
+(defn admin-event-log-str->edn
+  "Convert admin_event_log of orders from a string to edn"
+  [orders]
+  (map #(assoc %
+               :admin_event_log (edn/read-string (:admin_event_log %)))
+       orders))
+
+(def order-validations
+  {:notes [[v/string :message "Note must be a string!"]
+           [v/string :message "Cancellation reason must be a string!"]]})
+
+(defn add-cancel-reason
+  "Given current-order from the database, new-cancel-reason and admin-id, add
+  the new-cancel-reason to the admin_event_log of current-order."
+  [current-order new-cancel-reason admin-id]
+  (let [admin-event-log  (if-let [log (edn/read-string
+                                       (:admin_event_log current-order))]
+                           log
+                           [])
+        current-cancel-reason (->> admin-event-log
+                                   (filter #(= (:action %) "cancel-order"))
+                                   (sort-by :timestamp)
+                                   reverse
+                                   first
+                                   :comment)]
+    (cond (nil? new-cancel-reason)
+          current-order
+          (= new-cancel-reason current-cancel-reason)
+          current-order
+          (not= new-cancel-reason current-cancel-reason)
+          (assoc current-order
+                 :admin_event_log
+                 (str (merge
+                       admin-event-log
+                       {:timestamp (quot
+                                    (System/currentTimeMillis) 1000)
+                        :admin_id admin-id
+                        :action "cancel-order"
+                        :comment new-cancel-reason}))))))
+(defn add-notes
+  "Given current-order and new-notes, add them to the current-order"
+  [current-order new-notes]
+  (let [current-notes (:notes current-order)]
+    (if-not (nil? new-notes)
+      (assoc current-order
+             :notes new-notes)
+      current-order)))
+
+(defn update-order!
+  "Update fields of an order"
+  [db-conn order]
+  (if (b/valid? order order-validations)
+    (let [{:keys [admin-id id cancel_reason notes]} order
+          current-order (get-by-id db-conn id)
+          new-order (-> current-order
+                        (add-cancel-reason cancel_reason admin-id)
+                        (add-notes notes))
+          {:keys [admin_event_log notes]} new-order
+          update-order-result (!update db-conn "orders"
+                                       ;; note: only fields that can be updated
+                                       ;; by update-order! are included here.
+                                       {:admin_event_log admin_event_log
+                                        :notes notes}
+                                       {:id (:id current-order)})]
+      (if (:success update-order-result)
+        (assoc update-order-result :id (:id current-order))
+        update-order-result))
+    {:success false
+     :validation (b/validate order order-validations)}))
