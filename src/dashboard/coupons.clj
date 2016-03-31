@@ -6,10 +6,15 @@
             [common.db :refer [conn !insert !select !update]]
             [common.util :refer [rand-str-alpha-num split-on-comma]]))
 
-(defn coupons
+(defn get-coupons
   "Retrieve all coupons"
   [db-conn]
   (!select db-conn "coupons" ["*"] {:type "standard"}))
+
+(defn get-coupon
+  "Retrieve coupon by id"
+  [db-conn id]
+  (first (!select db-conn "coupons" ["*"] {:id id})))
 
 (defn in-future?
   "Is seconds a unix epoch value that is in the future?"
@@ -43,8 +48,10 @@
   bouncer error map."
   [db-conn new-coupon]
   (if (b/valid? new-coupon new-coupon-validations)
-    (let [{:keys [code value expiration_time only_for_first_orders]} new-coupon]
-      (!insert db-conn "coupons" {:id (rand-str-alpha-num 20)
+    (let [{:keys [code value expiration_time only_for_first_orders]} new-coupon
+          id (rand-str-alpha-num 20)
+          insert-result (!insert db-conn "coupons"
+                                 {:id id
                                   :code (format-coupon-code code)
                                   :value (* value -1)
                                   :expiration_time expiration_time
@@ -52,8 +59,10 @@
                                   (if only_for_first_orders 1 0)
                                   :type "standard"
                                   :used_by_license_plates ""
-                                  :used_by_user_ids ""
-                                  }))
+                                  :used_by_user_ids ""})]
+      (if (:success insert-result)
+        (assoc insert-result :id id)
+        insert-result))
     {:success false
      :validation (b/validate new-coupon new-coupon-validations)}))
 
@@ -68,13 +77,17 @@
   [db-conn coupon]
   (if (b/valid? coupon coupon-validations)
     (let [{:keys [code value expiration_time only_for_first_orders]} coupon
-          db-coupon (get-coupon-by-code db-conn code)]
-      (!update db-conn "coupons"
-               (assoc db-coupon
-                      :value (* value -1)
-                      :expiration_time expiration_time
-                      :only_for_first_orders (if only_for_first_orders 1 0))
-               {:id (:id db-coupon)}))
+          db-coupon (get-coupon-by-code db-conn code)
+          update-result (!update db-conn "coupons"
+                                 (assoc db-coupon
+                                        :value (* value -1)
+                                        :expiration_time expiration_time
+                                        :only_for_first_orders
+                                        (if only_for_first_orders 1 0))
+                                 {:id (:id db-coupon)})]
+      (if (:success update-result)
+        (assoc update-result :id (:id db-coupon))
+        update-result))
     {:success false
      :validation (b/validate coupon coupon-validations)}))
 

@@ -4,7 +4,7 @@
             [clojure.string :as s]
             [clojure.walk :refer [stringify-keys]]
             [common.util :refer [split-on-comma five-digit-zip-code
-                                        in?]]
+                                 in?]]
             [common.db :refer [!select !update]]))
 
 (defn read-zone-strings
@@ -97,16 +97,20 @@
   [db-conn zone]
   (if (b/valid? zone zone-validations)
     (let [{:keys [price-87 price-91 service-fee-60 service-fee-180
-                  service-time-bracket-begin service-time-bracket-end]} zone]
-      (when (:success
-             (!update db-conn "zones"
-                      {:fuel_prices (str {:87 price-87
-                                          :91 price-91})
-                       :service_fees (str {:60 service-fee-60
-                                           :180 service-fee-180})
-                       :service_time_bracket (str [service-time-bracket-begin
-                                                   service-time-bracket-end])}
-                      {:id (:id zone)}))
-        {:success true}))
+                  service-time-bracket-begin service-time-bracket-end id]} zone
+                  update-result (!update db-conn "zones"
+                                         {:fuel_prices
+                                          (str {:87 price-87
+                                                :91 price-91})
+                                          :service_fees
+                                          (str {:60 service-fee-60
+                                                :180 service-fee-180})
+                                          :service_time_bracket
+                                          (str [service-time-bracket-begin
+                                                service-time-bracket-end])}
+                                         {:id (:id zone)})]
+      (if (:success update-result)
+        (assoc update-result :id id)
+        update-result))
     {:success false
      :validation (b/validate zone zone-validations)}))

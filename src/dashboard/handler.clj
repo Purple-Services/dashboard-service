@@ -16,7 +16,8 @@
             [compojure.route :as route]
             [dashboard.analytics :as analytics]
             [dashboard.coupons :refer [create-standard-coupon!
-                                       coupons
+                                       get-coupons
+                                       get-coupon
                                        update-standard-coupon!]]
             [dashboard.couriers :refer [get-by-id include-lateness
                                         update-courier-zones!]]
@@ -29,9 +30,11 @@
                                       orders-since-date]]
             [dashboard.pages :as pages]
             [dashboard.users :refer [dash-users
+                                     process-user
                                      search-users
                                      send-push-to-all-active-users
-                                     send-push-to-users-list]]
+                                     send-push-to-users-list
+                                     update-user!]]
             [dashboard.zones :refer [get-zone-by-id
                                      read-zone-strings
                                      validate-and-update-zone!]]
@@ -86,9 +89,9 @@
 ;; and follow the same conventions.
 ;;
 ;; a user who can access everything would have the following permissions:
-;; #{"view-dash","view-couriers","edit-couriers","view-users","send-push",
-;;  "view-coupons","edit-coupons","create-coupons","view-zones","edit-zones",
-;;  "view-orders","edit-orders","download-stats"}
+;; #{"view-dash","view-couriers","edit-couriers","view-users","edit-users,
+;;   "send-push","view-coupons","edit-coupons","create-coupons","view-zones",
+;;   "edit-zones", "view-orders","edit-orders","download-stats"}
 ;;
 (def dashboard-uri-permissions
   [
@@ -123,6 +126,9 @@
     :method "POST"
     :permissions ["view-couriers"]}
    ;;!! users
+   {:uri "/user"
+    :method "PUT"
+    :permissions ["view-users" "edit-users"]}
    {:uri "/users"
     :method "GET"
     :permissions ["view-users" "view-orders"]}
@@ -307,6 +313,26 @@
                            (users/include-user-data (conn))
                            (include-lateness (conn)))})))
   ;;!! users
+  ;; get a user by id
+  (GET "/user/:id" [id]
+       (response
+        (into []
+              (->
+               (users/get-user-by-id (conn) id)
+               (process-user (!select
+                              (conn) "dashboard_users" [:email :id] {}))
+               list))))
+  ;; edit an existing user
+  (PUT "/user" [:as {body :body
+                     cookies :cookies}]
+       (let [b (keywordize-keys body)
+             admin-id (-> (keywordize-keys cookies)
+                          :user-id
+                          :value)]
+         (response
+          (update-user! (conn)
+                        (assoc b
+                               :admin_id admin-id)))))
   (GET "/users" []
        (response
         (into []
@@ -331,11 +357,11 @@
         (into []
               (search-users (conn) term))))
   ;;!! coupons
-  ;; get a coupon by code
-  (GET "/coupon/:code" [code]
+  ;; get a coupon by id
+  (GET "/coupon/:id" [id]
        (response
         (into []
-              (->> (coupons/get-coupon-by-code (conn) code)
+              (->> (get-coupon (conn) id)
                    convert-timestamp
                    list))))
   ;; edit an existing coupon
@@ -352,7 +378,7 @@
   (GET "/coupons" []
        (response
         (into []
-              (-> (coupons (conn))
+              (-> (get-coupons (conn))
                   (convert-timestamps)))))
   ;;!! zones
   ;; get a zone by its id
