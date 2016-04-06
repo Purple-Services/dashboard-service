@@ -10,5 +10,5 @@ pom.xml.asc
 \#*
 \.#*
 *~
-profiles.clj
 stats.csv
+*profiles.clj
