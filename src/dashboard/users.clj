@@ -105,8 +105,8 @@
 (def user-validations
   {:referral_gallons [
                       [v/number :message "Referral gallons must be a number"]
-                      [v/in-range [0 500]
-                       :message "Must be within 0 and 500 referral gallons"]
+                      [v/in-range [0 50000]
+                       :message "Must be within 0 and 50,000 referral gallons"]
                       ]})
 
 (defn update-user!
