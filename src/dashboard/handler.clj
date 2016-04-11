@@ -29,6 +29,7 @@
                                       include-zone-info
                                       admin-event-log-str->edn
                                       orders-since-date
+                                      search-orders
                                       update-order!]]
             [dashboard.pages :as pages]
             [dashboard.users :refer [dash-users
@@ -515,6 +516,13 @@
                    "text/csv; name=\"stats.csv\"")
            (header "Content-Disposition"
                    "attachment; filename=\"stats.csv\"")))
+  ;;!! search
+  (POST "/search" {body :body}
+        (response
+         (let [b (keywordize-keys body)
+               term (:term b)]
+           {:users (into [] (search-users (conn) term))
+            :orders (into [] (search-orders (conn) term))})))
   (route/resources "/"))
 
 (defroutes all-routes
