@@ -23,6 +23,7 @@
          :auth-refresh? false
          :browser-uri "/"
          :reload-paths ["src" "resources" "checkouts"]}
-  :aws {:beanstalk {:environments [{:name "dashboard-prod-env"}]
+  :aws {:beanstalk {:environments [{:name "dashboard-prod-env"}
+                                   {:name "dashboard-dev-env"}]
                     :s3-bucket "leinbeanstalkpurple"
                     :region "us-west-2"}})
