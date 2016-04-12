@@ -92,10 +92,8 @@
   "Search users by term"
   [db-conn term]
   (let [escaped-term (mysql-escape-str term)
-        remove-non-digit-chars
-        (fn [s] (apply str (filter #(#{\0,\1,\2,\3,\4,\5,\6,\7,\8,\9} %) s)))
         phone-number-term (-> term
-                              remove-non-digit-chars
+                              (s/replace #"-|\(|\)" "")
                               mysql-escape-str)
         admins (!select db-conn "dashboard_users" [:email :id] {})
         users (!select db-conn "users"
