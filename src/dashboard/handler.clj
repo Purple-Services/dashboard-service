@@ -478,16 +478,9 @@
   (POST "/orders-since-date"  {body :body}
         (response
          (let [b (keywordize-keys body)]
-           (into [] (->>
-                     (orders-since-date (conn)
-                                        (:date b)
-                                        (:unix-epoch? b))
-                     (include-user-name-phone-and-courier
-                      (conn))
-                     (include-vehicle (conn))
-                     (include-zone-info (conn))
-                     (include-was-late)
-                     (admin-event-log-str->edn))))))
+           (orders-since-date (conn)
+                              (:date b)
+                              (:unix-epoch? b)))))
   ;;!! analytics
   (GET "/status-stats-csv" []
        (response

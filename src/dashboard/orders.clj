@@ -23,19 +23,6 @@
    :number_rating :text_rating
    :payment_info :notes :admin_event_log])
 
-(defn orders-since-date
-  "Get all orders since date. A blank date will return all orders. When
-  unix-epoch? is true, assume date is in unix epoch seconds"
-  [db-conn date & [unix-epoch?]]
-  (!select db-conn "orders"
-           orders-select
-           {}
-           :custom-where
-           (str "timestamp_created >= "
-                (if unix-epoch?
-                  (str "FROM_UNIXTIME(" date ")")
-                  (str "'" date "'")))))
-
 (defn include-user-name-phone-and-courier
   "Given a vector of orders, assoc the user name, phone number and courier
   that is associated with the order"
@@ -236,6 +223,36 @@
     {:success false
      :validation (b/validate order order-validations)}))
 
+(defn process-orders
+  "Process orders, with data from db-conn, to send to dashboard client "
+  [orders db-conn]
+  (->> orders
+       (include-user-name-phone-and-courier db-conn)
+       (include-vehicle db-conn)
+       (include-zone-info db-conn)
+       (include-was-late)
+       (admin-event-log-str->edn)))
+
+(defn orders-since-date
+  "Get all orders since date. A blank date will return all orders. When
+  unix-epoch? is true, assume date is in unix epoch seconds"
+  [db-conn date & [unix-epoch?]]
+  (cond (not (nil? date))
+        (let [orders (!select db-conn "orders"
+                              orders-select
+                              {}
+                              :custom-where
+                              (str "timestamp_created >= "
+                                   (if unix-epoch?
+                                     (str "FROM_UNIXTIME(" date ")")
+                                     (str "'" date "'"))))]
+          (into [] (process-orders orders db-conn)))
+        (nil? date)
+        []
+        :else
+        {:success false
+         :message "Unknown error occured"}))
+
 (defn search-orders
   [db-conn term]
   (let [escaped-term (mysql-escape-str term)
@@ -247,9 +264,4 @@
                              "OR `address_street` LIKE  '%" escaped-term "%' "
                              "OR `license_plate` LIKE '%" escaped-term "%' "
                              "OR `coupon_code` LIKE '%" escaped-term "%'"))]
-    (->> orders
-         (include-user-name-phone-and-courier db-conn)
-         (include-vehicle db-conn)
-         (include-zone-info db-conn)
-         (include-was-late)
-         (admin-event-log-str->edn))))
+    (process-orders orders db-conn)))
