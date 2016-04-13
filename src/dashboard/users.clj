@@ -104,7 +104,8 @@
                             "OR `name` LIKE  '%" escaped-term "%' "
                             "OR `phone_number` LIKE '%" phone-number-term "%' "
                             "OR `email` LIKE '%" escaped-term "%' "
-                            "OR `referral_code` LIKE '%" escaped-term "%'"))]
+                            "OR `referral_code` LIKE '%" escaped-term "%'")
+                       :append "ORDER BY timestamp_created LIMIT 100")]
     (map #(process-user % admins) users)))
 
 (def user-validations

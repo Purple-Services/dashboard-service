@@ -305,5 +305,6 @@
                         (str "`id` LIKE '%" escaped-term "%' "
                              "OR `address_street` LIKE  '%" escaped-term "%' "
                              "OR `license_plate` LIKE '%" escaped-term "%' "
-                             "OR `coupon_code` LIKE '%" escaped-term "%'"))]
+                             "OR `coupon_code` LIKE '%" escaped-term "%'")
+                        :append "ORDER BY target_time_start LIMIT 100")]
     (process-orders orders db-conn)))
