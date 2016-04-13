@@ -30,7 +30,8 @@
                                       admin-event-log-str->edn
                                       orders-since-date
                                       search-orders
-                                      update-order!]]
+                                      update-order!
+                                      cancel-order]]
             [dashboard.pages :as pages]
             [dashboard.users :refer [dash-users
                                      process-user
@@ -448,18 +449,18 @@
           (update-order! (conn) (assoc order
                                        :admin-id admin-id)))))
   ;; cancel the order
-  (POST "/cancel-order" {body :body}
+  (POST "/cancel-order" [:as {body :body
+                              cookies :cookies}]
         (response
-         (let [b (keywordize-keys body)]
-           (orders/cancel
-            (conn)
-            (:user_id b)
-            (:order_id b)
-            :origin-was-dashboard true
-            :notify-customer true
-            :suppress-user-details true
-            :override-cancellable-statuses
-            (conj config/cancellable-statuses "servicing")))))
+         (let [b (keywordize-keys body)
+               admin-id (-> (keywordize-keys cookies)
+                            :user-id
+                            :value)]
+           (cancel-order (conn)
+                         (:user_id b)
+                         (:order_id b)
+                         admin-id
+                         (:cancel-reason b)))))
   ;; admin updates status of order (e.g., enroute -> servicing)
   (POST "/update-status" {body :body}
         (response

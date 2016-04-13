@@ -7,11 +7,12 @@
             [clojure.walk :refer [stringify-keys]]
             [common.db :refer [conn !select !update mysql-escape-str]]
             [opt.planner :refer [compute-distance]]
+            [common.config :as config]
             [common.users :as users]
             [common.util :refer [in? map->java-hash-map split-on-comma]]
             [common.zones :refer [get-all-zones-from-db
                                   get-zones]]
-            [common.orders :refer [get-by-id]]))
+            [common.orders :refer [get-by-id cancel]]))
 
 (def orders-select
   [:id :lat :lng :status :gallons :gas_type
@@ -164,6 +165,16 @@
   {:notes [[v/string :message "Note must be a string!"]
            [v/string :message "Cancellation reason must be a string!"]]})
 
+(defn add-event-to-admin-event-log
+  "Add an event to admin_event_log of order and return a string of the new event
+  log"
+  [order event]
+  (let [admin-event-log  (if-let [log (edn/read-string
+                                       (:admin_event_log order))]
+                           log
+                           [])]
+    (str (merge admin-event-log event))))
+
 (defn add-cancel-reason
   "Given current-order from the database, new-cancel-reason and admin-id, add
   the new-cancel-reason to the admin_event_log of current-order."
@@ -185,13 +196,14 @@
           (not= new-cancel-reason current-cancel-reason)
           (assoc current-order
                  :admin_event_log
-                 (str (merge
-                       admin-event-log
-                       {:timestamp (quot
-                                    (System/currentTimeMillis) 1000)
-                        :admin_id admin-id
-                        :action "cancel-order"
-                        :comment new-cancel-reason}))))))
+                 (add-event-to-admin-event-log
+                  current-order
+                  {:timestamp (quot
+                               (System/currentTimeMillis) 1000)
+                   :admin_id admin-id
+                   :action "cancel-order"
+                   :comment new-cancel-reason})))))
+
 (defn add-notes
   "Given current-order and new-notes, add them to the current-order"
   [current-order new-notes]
@@ -232,6 +244,36 @@
        (include-zone-info db-conn)
        (include-was-late)
        (admin-event-log-str->edn)))
+
+(defn cancel-order
+  "Cancel an order and create an entry in the admin_event_log"
+  [db-conn user-id order-id admin-id cancel-reason]
+  (let [cancel-response (cancel
+                         (conn)
+                         user-id
+                         order-id
+                         :origin-was-dashboard true
+                         :notify-customer true
+                         :suppress-user-details true
+                         :override-cancellable-statuses
+                         (conj config/cancellable-statuses "servicing"))
+        current-order  (get-by-id db-conn order-id)
+        event          {:timestamp (quot (System/currentTimeMillis) 1000)
+                        :admin_id admin-id
+                        :action "cancel-order"
+                        :comment (or cancel-reason "None")}
+        admin-event-log (add-event-to-admin-event-log current-order event)]
+    (cond (:success cancel-response)
+          (do
+            (!update db-conn
+                     "orders"
+                     {:admin_event_log admin-event-log}
+                     {:id order-id})
+            {:success true
+             :order (first (process-orders
+                            [(get-by-id db-conn order-id)]
+                            db-conn))})
+          :else cancel-response)))
 
 (defn orders-since-date
   "Get all orders since date. A blank date will return all orders. When
