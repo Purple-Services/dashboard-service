@@ -20,7 +20,7 @@
                                        get-coupon
                                        update-standard-coupon!]]
             [dashboard.couriers :refer [get-by-id include-lateness
-                                        update-courier-zones!]]
+                                        update-courier!]]
             [dashboard.login :as login]
             [dashboard.orders :refer [include-eta
                                       include-user-name-phone-and-courier
@@ -124,12 +124,15 @@
     :method "GET"
     :permissions ["view-couriers"]}
    {:uri "/courier"
-    :method "POST"
+    :method "PUT"
     :permissions ["edit-couriers"]}
    {:uri "/couriers"
     :method "POST"
     :permissions ["view-couriers"]}
    ;;!! users
+   {:uri "/user/:id"
+    :method "GET"
+    :permissions ["view-users"]}
    {:uri "/user"
     :method "PUT"
     :permissions ["view-users" "edit-users"]}
@@ -307,12 +310,11 @@
                    (include-lateness (conn))))))
   ;; update a courier
   ;; currently, only the zones can be updated
-  (POST "/courier" {body :body}
-        (let [b (keywordize-keys body)]
-          (response (update-courier-zones!
-                     (conn)
-                     (:id b)
-                     (:zones b)))))
+  (PUT "/courier" {body :body}
+       (let [b (keywordize-keys body)]
+         (response (update-courier!
+                    (conn)
+                    b))))
   (POST "/couriers" {body :body}
         (response
          (let [b (keywordize-keys body)]

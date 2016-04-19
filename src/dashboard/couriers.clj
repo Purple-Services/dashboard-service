@@ -1,7 +1,10 @@
 (ns dashboard.couriers
-  (:require [clojure.string :as s]
+  (:require [bouncer.core :as b]
+            [bouncer.validators :as v]
+            [clojure.string :as s]
+            [clojure.edn :as edn]
             [common.couriers :refer [process-courier]]
-            [common.db :refer [!select !update]]
+            [common.db :refer [!select !update conn]]
             [common.util :refer [split-on-comma]]))
 
 (defn get-by-id
@@ -53,38 +56,59 @@
                            "%")
                       "No orders.")))) m)))
 
-(defn update-courier-zones!
+(defn edn-read?
+  "Attempt to read x with edn/read-string, return true if x can be read,false
+  otherwise "
+  [x]
+  (try (edn/read-string x)
+       true
+       (catch Exception e false)))
+
+(def courier-validations
+  {:zones [;; verify that the zone assignments can be read as edn
+           ;; must be done first to prevent throwing an error
+           ;; from edn-read
+           [#(every? identity
+                     (->> %
+                          split-on-comma
+                          (map edn-read?)))
+            :message (str "Zones assignments must be "
+                          "comma-separated integer "
+                          "(whole number) values!") ]
+           ;; verify that all zones are integers
+           [#(every? integer?
+                     (->> %
+                          split-on-comma
+                          (map edn/read-string)
+                          (filter (comp not nil?))))
+            :message (str "All zones must be integer (whole number) "
+                          "values!")]
+           ;; verify that all zone assignments exist
+           [#(let [existant-zones-set (set (map :id (!select (conn) "zones"
+                                                             [:id] {})))
+                   zones (->> %
+                              split-on-comma
+                              (map edn/read-string)
+                              (filter (comp not nil?)))]
+               (every? identity (map (fn [zone]
+                                       (contains? existant-zones-set zone))
+                                     zones)))
+            :message (str "All zones in assignment must exist")]]})
+
+(defn update-courier!
   "Update the zones for courier with user-id"
-  [db-conn user-id zones]
-  (let [zones-assignment-set (try
-                               ;; wrap in doall, otherwise Exception might not
-                               ;; be caught
-                               (doall (->> zones
-                                           split-on-comma
-                                           (map (comp #(Integer. %) s/trim))
-                                           set))
-                               (catch Exception e (str "Error")))
-        existant-zones-set (set (map :id
-                                     (!select db-conn "zones" [:id] {})))
-        all-zones-exist? (every? identity
-                                 (map #(contains? existant-zones-set %)
-                                      zones-assignment-set))]
-    (cond
-      (s/blank? zones)
-      (!update db-conn
-               "couriers"
-               {:zones zones}
-               {:id user-id})
-      (= zones-assignment-set "Error")
-      {:success false
-       :message "Incorrectly formatted zone assignment"}
-      (not all-zones-exist?)
-      {:success false
-       :message "All zones in assignment must exist"}
-      all-zones-exist?
-      (!update db-conn
-               "couriers"
-               {:zones (s/join "," zones-assignment-set)}
-               {:id user-id})
-      :else {:success false
-             :message "Unknown error"})))
+  [db-conn courier]
+  ;; make sure the zones string will split into valid edn elements
+  (if (b/valid? courier courier-validations)
+    (let [zones-str (->> (:zones courier)
+                         split-on-comma
+                         (map edn/read-string)
+                         (filter (comp not nil?))
+                         set
+                         sort
+                         (s/join ","))]
+      (assoc
+       (!update db-conn "couriers" {:zones zones-str} {:id (:id courier)})
+       :id (:id courier)))
+    {:success false
+     :validation (b/validate courier courier-validations)}))
