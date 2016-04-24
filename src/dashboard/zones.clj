@@ -59,8 +59,7 @@
                                  "Service time must be a whole number!"]
                                 [v/in-range [0 1440]
                                  :message
-                                 "Service time must be between 0 and 1440"]
-                                ]
+                                 "Service time must be between 0 and 1440"]]
    :service-time-bracket-end [[v/required :message
                                "End time can not be blank!"]
                               [v/number
@@ -70,8 +69,7 @@
                                "Service time must be a whole number!"]
                               [v/in-range [0 1440]
                                :message
-                               "Service time must be between 0 and 1440"
-                               ]]})
+                               "Service time must be between 0 and 1440"]]})
 
 (defn validate-and-update-zone!
   "Given a zone map, validate it. If valid, update zone else return the

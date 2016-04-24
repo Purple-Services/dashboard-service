@@ -28,8 +28,7 @@
 
 (def new-coupon-validations
   {:code [[code-available? :message "Code is already in use"]
-          [v/required :message "Code must not be blank"]
-          ]
+          [v/required :message "Code must not be blank"]]
    :value [[v/required :message "Amount must be present!"]
            [v/number :message "Amount must in a dollar amount!"]
            [v/in-range [1 5000]
@@ -40,8 +39,7 @@
                      [in-future?
                       :message "Expiration date must be in the future!"]]
    :only_for_first_orders [v/required
-                           v/boolean
-                           ]})
+                           v/boolean]})
 
 (defn create-standard-coupon!
   "Given a new-coupon map, validate it. If valid, create coupon else return the
