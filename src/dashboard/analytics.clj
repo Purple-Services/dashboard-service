@@ -3,6 +3,7 @@
             [common.db :refer [conn !select !insert !update
                                mysql-escape-str]]
             [common.util :refer [in?]]
+            [clojure.java.jdbc :as sql]
             [clojure.string :as s]
             [clojure.data.csv :as csv]
             [clojure.java.io :as io]
@@ -198,3 +199,19 @@
                                                        (fn [x] (>= x 3)))
                                 ])))
                       dates)))))))
+
+(defn orders-per-day
+  [db-conn]
+  (let [orders-per-day-result (sql/with-connection db-conn
+                                (sql/with-query-results results
+                                  ["select DATE(timestamp_created), COUNT(DISTINCT id) from orders where status = ? group by DATE(timestamp_created)" "complete"]
+                                  (doall results)))
+        processed-orders
+        (->> orders-per-day-result
+             (map #(vals %))
+             (map #(hash-map (.toString (first %)) (second %)))
+             (sort-by first))
+        x (into [] (flatten (map keys processed-orders)))
+        y (into [] (flatten (map vals processed-orders)))]
+    {:x x
+     :y y}))

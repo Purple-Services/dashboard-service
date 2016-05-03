@@ -203,6 +203,9 @@
    {:uri "/download-stats-csv"
     :method "GET"
     :permissions ["download-stats"]}
+   {:uri "/orders-per-day"
+    :method "GET"
+    :permissions ["download-stats"]}
    ])
 
 (defn allowed?
@@ -512,6 +515,8 @@
                    "text/csv; name=\"stats.csv\"")
            (header "Content-Disposition"
                    "attachment; filename=\"stats.csv\"")))
+  (GET "/orders-per-day" []
+       (response (analytics/orders-per-day (conn))))
   ;;!! search
   (POST "/search" {body :body}
         (response

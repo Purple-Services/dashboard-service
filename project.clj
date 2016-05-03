@@ -1,9 +1,10 @@
-(defproject dashboard "1.0.1-SNAPSHOT"
+(defproject dashboard "1.0.2-SNAPSHOT"
   :description "Dashboard Service API that the dashboard client connects to."
   :url "https://dash.purpleapp.com"
   :dependencies [[org.clojure/clojure "1.7.0"]
                  [org.clojure/data.csv "0.1.3"]
                  [org.clojure/algo.generic "0.1.2"]
+                 [org.clojure/java.jdbc "0.2.3"]
                  [compojure "1.1.8"]
                  [bouncer "1.0.0"]
                  [buddy/buddy-auth "0.8.1"]
@@ -12,8 +13,8 @@
                  [ring/ring-jetty-adapter "1.4.0"]
                  [ring/ring-json "0.4.0"]
                  [ring/ring-ssl "0.2.1"]
+                 [common "1.0.5-SNAPSHOT"]
                  [ring-cors "0.1.7"]
-                 [common "1.0.3-SNAPSHOT"]
                  [opt "1.0.0-SNAPSHOT"]]
   :plugins [[lein-ring "0.9.7"]
             [lein-beanstalk "0.2.7"]]
