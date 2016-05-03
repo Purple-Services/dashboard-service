@@ -15,7 +15,7 @@
                  [ring/ring-ssl "0.2.1"]
                  [common "1.0.5-SNAPSHOT"]
                  [ring-cors "0.1.7"]
-                 [opt "1.0.0-SNAPSHOT"]]
+                 [opt "1.0.2-SNAPSHOT"]]
   :plugins [[lein-ring "0.9.7"]
             [lein-beanstalk "0.2.7"]]
   :ring {:handler dashboard.handler/handler
