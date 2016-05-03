@@ -20,7 +20,8 @@
                                        get-coupon
                                        update-standard-coupon!]]
             [dashboard.couriers :refer [get-by-id include-lateness
-                                        update-courier!]]
+                                        update-courier!
+                                        include-os-and-app-version]]
             [dashboard.login :as login]
             [dashboard.orders :refer [include-eta
                                       include-user-name-phone-and-courier
@@ -323,7 +324,8 @@
          (let [b (keywordize-keys body)]
            {:couriers (->> (couriers/all-couriers (conn))
                            (users/include-user-data (conn))
-                           (include-lateness (conn)))})))
+                           (include-lateness (conn))
+                           (include-os-and-app-version (conn)))})))
   ;;!! users
   ;; get a user by id
   (GET "/user/:id" [id]

@@ -56,6 +56,26 @@
                            "%")
                       "No orders.")))) m)))
 
+(defn include-os-and-app-version
+  "Given a courier map m, return a map with :os and :app_version"
+  [db-conn m]
+  (let [courier-ids (distinct (map :id m))
+        courier-users (!select db-conn "users"
+                               [:os :app_version :id]
+                               {}
+                               :custom-where
+                               (str "id IN (\""
+                                    (s/join "\",\"" (concat courier-ids))
+                                    "\")"))]
+    (map (fn [courier]
+           (let [user-courier (first
+                               (filter #(= (:id courier) (:id %))
+                                       courier-users))]
+             (assoc courier
+                    :os (:os user-courier)
+                    :app_version (:app_version user-courier))))
+         m)))
+
 (defn edn-read?
   "Attempt to read x with edn/read-string, return true if x can be read,false
   otherwise "
