@@ -204,7 +204,7 @@
   [db-conn]
   (let [orders-per-day-result (sql/with-connection db-conn
                                 (sql/with-query-results results
-                                  ["select DATE(timestamp_created), COUNT(DISTINCT id) from orders where status = ? group by DATE(timestamp_created)" "complete"]
+                                  ["select from_unixtime(substr(event_log,locate('complete',event_log)+ 9,10),'%Y-%m-%d') as 'date',COUNT(DISTINCT id) as 'orders' from orders where status = 'complete' GROUP BY from_unixtime(substr(event_log,locate('complete',event_log)+ 9,10),'%Y-%m-%d')"]
                                   (doall results)))
         processed-orders
         (->> orders-per-day-result
