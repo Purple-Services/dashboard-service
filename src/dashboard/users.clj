@@ -7,7 +7,7 @@
             [crypto.password.bcrypt :as bcrypt]
             [common.db :refer [mysql-escape-str !select !update]]
             [common.users :refer [send-push get-user-by-id]]
-            [common.util :refer [in? sns-publish sns-client]]))
+            [common.util :refer [in? sns-publish sns-client sns-client]]))
 
 (def users-select
   [:id :name :email :phone_number :os
@@ -71,6 +71,14 @@
   (do (future (run! #(send-push db-conn (:id %) message)
                     (!select db-conn "ActiveUsers" [:id :name] {})))
       {:success true}))
+
+(defn send-push-to-table-view
+  "Send push notifications to all users in mySQL view-table. Assumes that
+  the view will have an arn_enpoint column."
+  [db-conn message table-view]
+  (do (future (run! #(sns-publish sns-client (:arn_endpoint %) message)
+                    (!select db-conn table-view [:arn_endpoint] {})))
+      {:success true :message (str "You sent " message " to " table-view)}))
 
 (defn send-push-to-users-list
   [db-conn message user-ids]

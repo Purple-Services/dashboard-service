@@ -39,6 +39,7 @@
                                      search-users
                                      send-push-to-all-active-users
                                      send-push-to-users-list
+                                     send-push-to-table-view
                                      update-user!]]
             [dashboard.zones :refer [get-zone-by-id
                                      read-zone-strings
@@ -207,7 +208,9 @@
    {:uri "/orders-per-day"
     :method "POST"
     :permissions ["download-stats"]}
-   ])
+   {:uri "/send-push-to-table-view"
+    :method "POST"
+    :permissions ["download-stats" "send-push"]}])
 
 (defn allowed?
   "given a vector of uri-permission maps and a request map, determine if the
@@ -520,6 +523,11 @@
   (POST "/orders-per-day" {body :body}
         (response (let [b (keywordize-keys body)]
                     (analytics/orders-per-day (conn) (:timezone b)))))
+  (POST "/send-push-to-table-view" {body :body}
+        (response (let [b (keywordize-keys body)]
+                    (send-push-to-table-view (conn)
+                                             (:message b)
+                                             (:table-view b)))))
   ;;!! search
   (POST "/search" {body :body}
         (response
