@@ -205,7 +205,7 @@
     :method "GET"
     :permissions ["download-stats"]}
    {:uri "/orders-per-day"
-    :method "GET"
+    :method "POST"
     :permissions ["download-stats"]}
    ])
 
@@ -517,8 +517,9 @@
                    "text/csv; name=\"stats.csv\"")
            (header "Content-Disposition"
                    "attachment; filename=\"stats.csv\"")))
-  (GET "/orders-per-day" []
-       (response (analytics/orders-per-day (conn))))
+  (POST "/orders-per-day" {body :body}
+        (response (let [b (keywordize-keys body)]
+                    (analytics/orders-per-day (conn) (:timezone b)))))
   ;;!! search
   (POST "/search" {body :body}
         (response
