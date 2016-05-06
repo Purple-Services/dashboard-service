@@ -208,9 +208,10 @@
    {:uri "/orders-per-day"
     :method "POST"
     :permissions ["download-stats"]}
+   ;;!! Marketing
    {:uri "/send-push-to-table-view"
     :method "POST"
-    :permissions ["download-stats" "send-push"]}])
+    :permissions ["download-stats" "send-push" "marketing"]}])
 
 (defn allowed?
   "given a vector of uri-permission maps and a request map, determine if the
