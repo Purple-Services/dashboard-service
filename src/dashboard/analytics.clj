@@ -214,7 +214,7 @@
         timezone (or timezone "America/Los_Angeles")
         orders-per-day-result (sql/with-connection db-conn
                                 (sql/with-query-results results
-                                  ["select from_unixtime(substr(event_log,locate('complete',event_log)+ 9,10),'%Y-%m-%d') as 'date',COUNT(DISTINCT id) as 'orders' from orders where status = 'complete' AND  substr(event_log,locate('complete',event_log) + 9, 10) > 1420070400 GROUP BY from_unixtime(substr(event_log,locate('complete',event_log)+ 9,10),'%Y-%m-%d')"]
+                                  ["select date(convert_tz(from_unixtime(substr(event_log,locate('complete',event_log)+ 9,10)),'UTC',?)) as 'date',COUNT(DISTINCT id) as 'orders' from orders where status = 'complete' AND  substr(event_log,locate('complete',event_log) + 9, 10) > 1420070400 GROUP BY date(convert_tz(from_unixtime(substr(event_log,locate('complete',event_log)+ 9,10)),'UTC',?));" timezone timezone]
                                   (doall results)))
         processed-orders
         (->> orders-per-day-result
