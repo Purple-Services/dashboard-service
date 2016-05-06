@@ -199,12 +199,22 @@
                                                        (fn [x] (>= x 3)))
                                 ])))
                       dates)))))))
+;; !! implement this tomorrow!
+(defn raw-sql-query
+  [db-conn query]
+  )
 
 (defn orders-per-day
-  [db-conn]
-  (let [orders-per-day-result (sql/with-connection db-conn
+  "Get a count of orders per day using timezone. Timezone is a plain-text
+  description. ex: 'America/Los_Angeles'. This depends on proper setup of the
+  timezones table in mySQL.
+  see: http://dev.mysql.com/doc/refman/5.7/en/time-zone-support.html"
+  [db-conn & [timezone]]
+  (let [
+        timezone (or timezone "America/Los_Angeles")
+        orders-per-day-result (sql/with-connection db-conn
                                 (sql/with-query-results results
-                                  ["select from_unixtime(substr(event_log,locate('complete',event_log)+ 9,10),'%Y-%m-%d') as 'date',COUNT(DISTINCT id) as 'orders' from orders where status = 'complete' GROUP BY from_unixtime(substr(event_log,locate('complete',event_log)+ 9,10),'%Y-%m-%d')"]
+                                  ["select date(convert_tz(from_unixtime(substr(event_log,locate('complete',event_log)+ 9,10)),'UTC',?)) as 'date',COUNT(DISTINCT id) as 'orders' from orders where status = 'complete' AND  substr(event_log,locate('complete',event_log) + 9, 10) > 1420070400 GROUP BY date(convert_tz(from_unixtime(substr(event_log,locate('complete',event_log)+ 9,10)),'UTC',?));" timezone timezone]
                                   (doall results)))
         processed-orders
         (->> orders-per-day-result
@@ -215,3 +225,17 @@
         y (into [] (flatten (map vals processed-orders)))]
     {:x x
      :y y}))
+
+(defn orders-per-courier
+  "Return a list of timestamps corresponding to all "
+  [db-conn courier-id]
+  (let [orders-per-courier-result
+        (sql/with-connection db-conn
+          (sql/with-query-results results
+            ["select date(convert_tz(from_unixtime(substr(event_log,locate('complete',event_log)+ 9,10)),'UTC','America/Los_Angeles')) as 'date',COUNT(DISTINCT id) as 'orders' from orders where status = 'complete' AND  substr(event_log,locate('complete',event_log) + 9, 10) > 1420070400 GROUP BY date(convert_tz(from_unixtime(substr(event_log,locate('complete',event_log)+ 9,10)),'UTC','America/Los_Angeles'));"]
+            (doall results)))
+        ])
+
+  ;; raw sql
+  ;; select substr(event_log,locate('complete',event_log) + 9,10) as 'epoch' from orders where status = 'complete' and courier_id = 'aQbOmZ2TQaehO0m8uygk';
+  )
