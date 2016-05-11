@@ -262,6 +262,11 @@
         final-vector (into [] (concat [dates-vector] courier-orders))]
     final-vector))
 
+(defn get-event-time-mysql
+  "return a mySQL string for retrieving an event time from an order "
+  [event-log-name event]
+  (str "substr(" event-log-name ",locate('" event "'," event-log-name ") + 9,10)"))
+
 ;; perhaps this and orders-per-courier could be more general
 (defn total-orders-per-timeframe
   "Get a count of orders per timeframe using timezone. Timezone is a plain-text
@@ -275,10 +280,21 @@
                      "weekly" "%Y-%U"
                      "%Y-%m-%d")
         timezone (or timezone "America/Los_Angeles")
+        sql (str "select date_format(convert_tz(from_unixtime("
+                 (get-event-time-mysql "event_log" "complete")
+                 "),'UTC',?),?) as 'date'"
+                 ",COUNT(DISTINCT id) as 'orders' from orders where"
+                 " status = 'complete' AND  "
+                 (get-event-time-mysql "event_log" "complete")
+                 " > 1420070400 GROUP BY "
+                 "date_format(convert_tz(from_unixtime("
+                 (get-event-time-mysql "event_log" "complete")
+                 "),'UTC',?),?);")
         orders-per-day-result
-        (raw-sql-query db-conn
-                       ["select date_format(convert_tz(from_unixtime(substr(event_log,locate('complete',event_log)+ 9,10)),'UTC',?),?) as 'date',COUNT(DISTINCT id) as 'orders' from orders where status = 'complete' AND  substr(event_log,locate('complete',event_log) + 9, 10) > 1420070400 GROUP BY date_format(convert_tz(from_unixtime(substr(event_log,locate('complete',event_log)+ 9,10)),'UTC',?),?);" timezone timeformat timezone timeformat])
-        ]
+        (raw-sql-query
+         db-conn
+         [sql
+          timezone timeformat timezone timeformat])]
     orders-per-day-result))
 
 
@@ -323,8 +339,26 @@
         orders-per-courier-result
         (raw-sql-query
          db-conn
-         ["select (select `users`.`name` AS `name` from `users` where (`users`.`id` = `orders`.`courier_id`)) AS `name`, date_format(convert_tz(from_unixtime(`orders`.`target_time_start`),'UTC',?),?) AS `date`,count(0) AS `count` from `orders` where ((`orders`.`status` = 'complete') and (`orders`.`courier_id` <> '6nJd1SMjMnxxhUsKp3Nk')) group by `orders`.`courier_id`,date_format(convert_tz(from_unixtime(`orders`.`target_time_start`),'UTC',?),?) order by date_format(convert_tz(from_unixtime(`orders`.`target_time_start`),'UTC',?),?) asc;" timezone timeformat timezone timeformat timezone timeformat]
-         )]
+         [(str "SELECT (SELECT `users`.`name` AS `name` FROM `users` WHERE "
+               "(`users`.`id` = `orders`.`courier_id`)) AS `name`, "
+               "date_format(convert_tz(from_unixtime("
+               (get-event-time-mysql "`orders`.`event_log`" "complete")
+               "),'UTC',?),?) "
+               "AS `date`,count(0) AS `count` FROM `orders` "
+               "WHERE ((`orders`.`status` = 'complete') "
+               "AND (`orders`.`courier_id` <> '6nJd1SMjMnxxhUsKp3Nk')) "
+               "AND "
+               (get-event-time-mysql "event_log" "complete")
+               " > 1420070400 "
+               "GROUP BY"
+               " `orders`.`courier_id`,"
+               "date_format(convert_tz(from_unixtime("
+               (get-event-time-mysql "`orders`.`event_log`" "complete")
+               "),'UTC',?),?) ORDER BY "
+               "date_format(convert_tz(from_unixtime("
+               (get-event-time-mysql "`orders`.`event_log`" "complete")
+               "),'UTC',?),?) asc;")
+          timezone timeformat timezone timeformat timezone timeformat])]
     orders-per-courier-result))
 
 (defn orders-per-courier-response
