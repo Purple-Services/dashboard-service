@@ -521,9 +521,23 @@
                    "text/csv; name=\"stats.csv\"")
            (header "Content-Disposition"
                    "attachment; filename=\"stats.csv\"")))
-  (POST "/orders-per-day" {body :body}
-        (response (let [b (keywordize-keys body)]
-                    (analytics/orders-per-day (conn) (:timezone b)))))
+  (POST "/total-orders-per-timeframe" {body :body}
+        (response (let [b (keywordize-keys body)
+                        {:keys [timezone timeframe response-type]} b]
+                    (analytics/total-orders-per-timeframe-response
+                     (conn)
+                     response-type
+                     timeframe
+                     timezone))))
+  (POST "/orders-per-courier" {body :body}
+        (response (let [b (keywordize-keys body)
+                        {:keys [timeframe timezone response-type]} b]
+                    (analytics/orders-per-courier-response
+                     (conn)
+                     response-type
+                     timeframe
+                     timezone))))
+  ;;!! Marketing
   (POST "/send-push-to-table-view" {body :body}
         (response (let [b (keywordize-keys body)]
                     (send-push-to-table-view (conn)

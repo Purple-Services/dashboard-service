@@ -3,9 +3,11 @@
             [common.db :refer [conn !select !insert !update
                                mysql-escape-str]]
             [common.util :refer [in?]]
+            [clojure.core.matrix :as mat]
             [clojure.java.jdbc :as sql]
             [clojure.string :as s]
             [clojure.data.csv :as csv]
+            [clojure-csv.core :refer [write-csv]]
             [clojure.java.io :as io]
             [clj-time.core :as time]
             [clj-time.periodic :as periodic]
@@ -201,41 +203,143 @@
                       dates)))))))
 ;; !! implement this tomorrow!
 (defn raw-sql-query
-  [db-conn query]
-  )
+  "Given a raw query-vec, return the results"
+  [db-conn query-vec]
+  (sql/with-connection db-conn
+    (sql/with-query-results results
+      query-vec
+      (doall results))))
 
-(defn orders-per-day
-  "Get a count of orders per day using timezone. Timezone is a plain-text
+(defn vec-elements->str
+  [v]
+  (->> v
+       (map str)
+       (into [])))
+
+(defn vec-of-vec-elements->str
+  [v]
+  (->> v
+       (map vec-elements->str)
+       (into [])))
+
+(defn transpose-dates
+  "Given a vector of maps of the form
+  [{:name <name>
+    :date <date>
+    :count <count>},
+    ...]
+
+  Return a vector of vectors of the form
+  [[\"dates\" date_1 ... date_i]
+   [:name_1 date_count_1 ... date_count_i]
+   ...
+   [:name_i date_count_1 ... date_count_i]
+
+  date_count_i is 0 when the corresponding vector for that date does not exist"
+  [date-count-vec]
+  (let [dates (->> date-count-vec
+                   (map :date)
+                   distinct)
+        names (->> date-count-vec
+                   (map :name)
+                   distinct)
+        count-for-date (fn [date maps]
+                         (first (filter #(= date (:date %))
+                                        maps)))
+        name-count (fn [name-val dates]
+                     (let [name-maps
+                           (filter #(= name-val (:name %))
+                                   date-count-vec)
+                           name-counts
+                           (map #(if-let [order-count
+                                          (:count
+                                           (count-for-date % name-maps))]
+                                   order-count
+                                   0) dates)]
+                       (into [] (concat [name-val] name-counts))))
+        courier-orders (map #(name-count % dates) names)
+        dates-vector (into [] (concat ["dates"] dates))
+        final-vector (into [] (concat [dates-vector] courier-orders))]
+    final-vector))
+
+;; perhaps this and orders-per-courier could be more general
+(defn total-orders-per-timeframe
+  "Get a count of orders per timeframe using timezone. Timezone is a plain-text
   description. ex: 'America/Los_Angeles'. This depends on proper setup of the
   timezones table in mySQL.
   see: http://dev.mysql.com/doc/refman/5.7/en/time-zone-support.html"
-  [db-conn & [timezone]]
-  (let [
+  [db-conn timeframe & [timezone]]
+  (let [timeformat (condp = timeframe
+                     "hourly" "%Y-%m-%d %H"
+                     "daily" "%Y-%m-%d"
+                     "weekly" "%Y-%U"
+                     "%Y-%m-%d")
         timezone (or timezone "America/Los_Angeles")
-        orders-per-day-result (sql/with-connection db-conn
-                                (sql/with-query-results results
-                                  ["select date(convert_tz(from_unixtime(substr(event_log,locate('complete',event_log)+ 9,10)),'UTC',?)) as 'date',COUNT(DISTINCT id) as 'orders' from orders where status = 'complete' AND  substr(event_log,locate('complete',event_log) + 9, 10) > 1420070400 GROUP BY date(convert_tz(from_unixtime(substr(event_log,locate('complete',event_log)+ 9,10)),'UTC',?));" timezone timezone]
-                                  (doall results)))
-        processed-orders
-        (->> orders-per-day-result
-             (map #(vals %))
-             (map #(hash-map (.toString (first %)) (second %)))
-             (sort-by first))
-        x (into [] (flatten (map keys processed-orders)))
-        y (into [] (flatten (map vals processed-orders)))]
-    {:x x
-     :y y}))
+        orders-per-day-result
+        (raw-sql-query db-conn
+                       ["select date_format(convert_tz(from_unixtime(substr(event_log,locate('complete',event_log)+ 9,10)),'UTC',?),?) as 'date',COUNT(DISTINCT id) as 'orders' from orders where status = 'complete' AND  substr(event_log,locate('complete',event_log) + 9, 10) > 1420070400 GROUP BY date_format(convert_tz(from_unixtime(substr(event_log,locate('complete',event_log)+ 9,10)),'UTC',?),?);" timezone timeformat timezone timeformat])
+        ]
+    orders-per-day-result))
+
+
+;; it could also be the case that csv is too big to store in the browser
+;; in production, might have to save files anyway.
+(defn total-orders-per-timeframe-response
+  "Get a count of orders per day using timezone. response-type
+   is either json or csv"
+  [db-conn response-type timeframe & [timezone]]
+  (let [orders-per-day-result (orders-per-timeframe db-conn timeframe timezone)]
+    (cond (= response-type "json")
+          (let [processed-orders
+                (->> orders-per-day-result
+                     (map #(vals %))
+                     (map #(hash-map (.toString (first %)) (second %)))
+                     (sort-by first))
+                x (into [] (flatten (map keys processed-orders)))
+                y (into [] (flatten (map vals processed-orders)))]
+            {:x x
+             :y y})
+          (= response-type "csv")
+          (let [csv (->> orders-per-day-result
+                         (map #(vec (vals %)))
+                         (into [])
+                         (mat/transpose)
+                         (vec-of-vec-elements->str)
+                         (write-csv))]
+            {:data csv
+             :type "csv"}))))
 
 (defn orders-per-courier
-  "Return a list of timestamps corresponding to all "
-  [db-conn courier-id]
-  (let [orders-per-courier-result
-        (sql/with-connection db-conn
-          (sql/with-query-results results
-            ["select date(convert_tz(from_unixtime(substr(event_log,locate('complete',event_log)+ 9,10)),'UTC','America/Los_Angeles')) as 'date',COUNT(DISTINCT id) as 'orders' from orders where status = 'complete' AND  substr(event_log,locate('complete',event_log) + 9, 10) > 1420070400 GROUP BY date(convert_tz(from_unixtime(substr(event_log,locate('complete',event_log)+ 9,10)),'UTC','America/Los_Angeles'));"]
-            (doall results)))
-        ])
+  "Return a list of couriers and their order total orders for timeframe using
+  timezone "
+  [db-conn timeframe & [timezone]]
+  (let [timezone (or timezone "America/Los_Angeles")
+        timeformat (condp = timeframe
+                     "hourly" "%Y-%m-%d %H"
+                     "daily" "%Y-%m-%d"
+                     "weekly" "%Y-%U"
+                     "%Y-%U")
+        orders-per-courier-result
+        (raw-sql-query
+         db-conn
+         ["select (select `users`.`name` AS `name` from `users` where (`users`.`id` = `orders`.`courier_id`)) AS `name`, date_format(convert_tz(from_unixtime(`orders`.`target_time_start`),'UTC',?),?) AS `date`,count(0) AS `count` from `orders` where ((`orders`.`status` = 'complete') and (`orders`.`courier_id` <> '6nJd1SMjMnxxhUsKp3Nk')) group by `orders`.`courier_id`,date_format(convert_tz(from_unixtime(`orders`.`target_time_start`),'UTC',?),?) order by date_format(convert_tz(from_unixtime(`orders`.`target_time_start`),'UTC',?),?) asc;" timezone timeformat timezone timeformat timezone timeformat]
+         )]
+    orders-per-courier-result))
 
-  ;; raw sql
-  ;; select substr(event_log,locate('complete',event_log) + 9,10) as 'epoch' from orders where status = 'complete' and courier_id = 'aQbOmZ2TQaehO0m8uygk';
-  )
+(defn orders-per-courier-response
+  "Return a list of couriers and their total order count for timeframe using
+  optional timezone. default timezone is 'America/Los_Angeles'."
+  [db-conn response-type timeframe & [timezone]]
+  (let [orders-per-courier-result
+        (orders-per-courier db-conn timeframe timezone)]
+    (cond (= response-type "csv")
+          (let [csv (->> orders-per-courier-result
+                         (transpose-dates)
+                         (vec-of-vec-elements->str)
+                         (write-csv))]
+            {:data csv
+             :type "csv"}))))
+
+;; ;; orders per week (global)
+
+;; select date_format(convert_tz(from_unixtime(substr(event_log,locate('complete',event_log)+ 9,10)),'UTC','America/Los_Angeles'),'%Y-%u') as 'date',COUNT(DISTINCT id) as 'orders' from orders where status = 'complete' AND  substr(event_log,locate('complete',event_log) + 9, 10) > 1420070400 GROUP BY date_format(convert_tz(from_unixtime(substr(event_log,locate('complete',event_log)+ 9,10)),'UTC','America/Los_Angeles'),'%Y-%u');
