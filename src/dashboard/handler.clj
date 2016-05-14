@@ -523,19 +523,25 @@
                    "attachment; filename=\"stats.csv\"")))
   (POST "/total-orders-per-timeframe" {body :body}
         (response (let [b (keywordize-keys body)
-                        {:keys [timezone timeframe response-type]} b]
+                        {:keys [timezone timeframe response-type from-date
+                                to-date]} b]
                     (analytics/total-orders-per-timeframe-response
                      (conn)
                      response-type
                      timeframe
+                     from-date
+                     to-date
                      timezone))))
   (POST "/orders-per-courier" {body :body}
         (response (let [b (keywordize-keys body)
-                        {:keys [timeframe timezone response-type]} b]
+                        {:keys [timeframe timezone response-type
+                                from-date to-date]} b]
                     (analytics/orders-per-courier-response
                      (conn)
                      response-type
                      timeframe
+                     from-date
+                     to-date
                      timezone))))
   ;;!! Marketing
   (POST "/send-push-to-table-view" {body :body}

@@ -263,9 +263,14 @@
     final-vector))
 
 (defn get-event-time-mysql
-  "return a mySQL string for retrieving an event time from an order "
+  "return a MySQL string for retrieving an event time from an order "
   [event-log-name event]
   (str "substr(" event-log-name ",locate('" event "'," event-log-name ") + 9,10)"))
+
+(defn convert-datetime-timezone-to-UTC-mysql
+  "Return a MySQL string for converting date in timezone to UTC unix timestamp"
+  [datetime timezone]
+  (str "unix_timestamp(convert_tz('" datetime "','" timezone "','UTC'))"))
 
 ;; perhaps this and orders-per-courier could be more general
 (defn total-orders-per-timeframe
@@ -273,7 +278,7 @@
   description. ex: 'America/Los_Angeles'. This depends on proper setup of the
   timezones table in mySQL.
   see: http://dev.mysql.com/doc/refman/5.7/en/time-zone-support.html"
-  [db-conn timeframe & [timezone]]
+  [db-conn timeframe from-date to-date & [timezone]]
   (let [timeformat (condp = timeframe
                      "hourly" "%Y-%m-%d %H"
                      "daily" "%Y-%m-%d"
@@ -286,7 +291,16 @@
                  ",COUNT(DISTINCT id) as 'orders' from orders where"
                  " status = 'complete' AND  "
                  (get-event-time-mysql "event_log" "complete")
-                 " > 1420070400 GROUP BY "
+                 " > 1420070400 "
+                 "AND "
+                 (get-event-time-mysql "event_log" "complete")
+                 " >= "
+                 (convert-datetime-timezone-to-UTC-mysql from-date timezone) " "
+                 "AND "
+                 (get-event-time-mysql "event_log" "complete")
+                 " <= "
+                 (convert-datetime-timezone-to-UTC-mysql to-date timezone) " "
+                 "GROUP BY "
                  "date_format(convert_tz(from_unixtime("
                  (get-event-time-mysql "event_log" "complete")
                  "),'UTC',?),?);")
@@ -303,9 +317,10 @@
 (defn total-orders-per-timeframe-response
   "Get a count of orders per day using timezone. response-type
    is either json or csv"
-  [db-conn response-type timeframe & [timezone]]
-  (let [orders-per-day-result (total-orders-per-timeframe db-conn timeframe
-                                                          timezone)]
+  [db-conn response-type timeframe from-date to-date & [timezone]]
+  (let [orders-per-day-result
+        (total-orders-per-timeframe db-conn timeframe from-date to-date
+                                    timezone)]
     (cond (= response-type "json")
           (let [processed-orders
                 (->> orders-per-day-result
@@ -329,44 +344,59 @@
 (defn orders-per-courier
   "Return a list of couriers and their order total orders for timeframe using
   timezone "
-  [db-conn timeframe & [timezone]]
+  [db-conn timeframe from-date to-date & [timezone]]
   (let [timezone (or timezone "America/Los_Angeles")
         timeformat (condp = timeframe
                      "hourly" "%Y-%m-%d %H"
                      "daily" "%Y-%m-%d"
                      "weekly" "%Y-%U"
                      "%Y-%U")
+        sql (str "SELECT (SELECT `users`.`name` AS `name` FROM `users` WHERE "
+                 "(`users`.`id` = `orders`.`courier_id`)) AS `name`, "
+                 "date_format(convert_tz(from_unixtime("
+                 (get-event-time-mysql "`orders`.`event_log`" "complete")
+                 "),'UTC',?),?) "
+                 "AS `date`,count(0) AS `count` FROM `orders` "
+                 "WHERE ((`orders`.`status` = 'complete') "
+                 "AND (`orders`.`courier_id` <> '6nJd1SMjMnxxhUsKp3Nk')) "
+                 "AND "
+                 (get-event-time-mysql "event_log" "complete")
+                 " > 1420070400 "
+                 "AND "
+                 (get-event-time-mysql "event_log" "complete")
+                 " >= "
+                 (convert-datetime-timezone-to-UTC-mysql from-date timezone) " "
+                 "AND "
+                 (get-event-time-mysql "event_log" "complete")
+                 " <= "
+                 (convert-datetime-timezone-to-UTC-mysql to-date timezone) " "
+                 "GROUP BY"
+                 " `orders`.`courier_id`,"
+                 "date_format(convert_tz(from_unixtime("
+                 (get-event-time-mysql "`orders`.`event_log`" "complete")
+                 "),'UTC',?),?) ORDER BY "
+                 "date_format(convert_tz(from_unixtime("
+                 (get-event-time-mysql "`orders`.`event_log`" "complete")
+                 "),'UTC',?),?) asc;")
         orders-per-courier-result
         (raw-sql-query
          db-conn
-         [(str "SELECT (SELECT `users`.`name` AS `name` FROM `users` WHERE "
-               "(`users`.`id` = `orders`.`courier_id`)) AS `name`, "
-               "date_format(convert_tz(from_unixtime("
-               (get-event-time-mysql "`orders`.`event_log`" "complete")
-               "),'UTC',?),?) "
-               "AS `date`,count(0) AS `count` FROM `orders` "
-               "WHERE ((`orders`.`status` = 'complete') "
-               "AND (`orders`.`courier_id` <> '6nJd1SMjMnxxhUsKp3Nk')) "
-               "AND "
-               (get-event-time-mysql "event_log" "complete")
-               " > 1420070400 "
-               "GROUP BY"
-               " `orders`.`courier_id`,"
-               "date_format(convert_tz(from_unixtime("
-               (get-event-time-mysql "`orders`.`event_log`" "complete")
-               "),'UTC',?),?) ORDER BY "
-               "date_format(convert_tz(from_unixtime("
-               (get-event-time-mysql "`orders`.`event_log`" "complete")
-               "),'UTC',?),?) asc;")
+         [sql
           timezone timeformat timezone timeformat timezone timeformat])]
     orders-per-courier-result))
 
 (defn orders-per-courier-response
   "Return a list of couriers and their total order count for timeframe using
   optional timezone. default timezone is 'America/Los_Angeles'."
-  [db-conn response-type timeframe & [timezone]]
-  (let [orders-per-courier-result
-        (orders-per-courier db-conn timeframe timezone)]
+  [db-conn response-type timeframe from-date to-date & [timezone]]
+  (let [from-date (str from-date " 00:00:00")
+        to-date   (str to-date " 23:59:59")
+        orders-per-courier-result
+        (orders-per-courier db-conn
+                            timeframe
+                            from-date
+                            to-date
+                            timezone)]
     (cond (= response-type "csv")
           (let [csv (->> orders-per-courier-result
                          (transpose-dates)
