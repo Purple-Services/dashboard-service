@@ -318,7 +318,9 @@
   "Get a count of orders per day using timezone. response-type
    is either json or csv"
   [db-conn response-type timeframe from-date to-date & [timezone]]
-  (let [orders-per-day-result
+  (let [from-date (str from-date " 00:00:00")
+        to-date (str to-date " 23:59:59")
+        orders-per-day-result
         (total-orders-per-timeframe db-conn timeframe from-date to-date
                                     timezone)]
     (cond (= response-type "json")
