@@ -521,28 +521,65 @@
                    "text/csv; name=\"stats.csv\"")
            (header "Content-Disposition"
                    "attachment; filename=\"stats.csv\"")))
-  (POST "/total-orders-per-timeframe" {body :body}
+  ;; orders count
+  (POST "/total-orders" {body :body}
         (response (let [b (keywordize-keys body)
                         {:keys [timezone timeframe response-type from-date
                                 to-date]} b]
-                    (analytics/total-orders-per-timeframe-response
+                    (analytics/total-for-select-response
                      (conn)
-                     response-type
-                     timeframe
-                     from-date
-                     to-date
-                     timezone))))
+                     (analytics/totals-query
+                      {:select-statement
+                       "COUNT(DISTINCT id) as `orders`"
+                       :from-date from-date
+                       :to-date to-date
+                       :timezone timezone
+                       :timeformat (analytics/timeframe->timeformat
+                                    timeframe)})
+                     response-type))))
   (POST "/orders-per-courier" {body :body}
         (response (let [b (keywordize-keys body)
                         {:keys [timeframe timezone response-type
                                 from-date to-date]} b]
-                    (analytics/orders-per-courier-response
+                    (analytics/per-courier-response
                      (conn)
-                     response-type
-                     timeframe
-                     from-date
-                     to-date
-                     timezone))))
+                     (analytics/per-courier-query
+                      {:select-statement "count(0) AS `count`"
+                       :from-date from-date
+                       :to-date to-date
+                       :timezone timezone
+                       :timeformat (analytics/timeframe->timeformat
+                                    timeframe)})
+                     response-type))))
+  ;; gallons count
+  (POST "/total-gallons" {body :body}
+        (response (let [b (keywordize-keys body)
+                        {:keys [timezone timeframe response-type from-date
+                                to-date]} b]
+                    (analytics/total-for-select-response
+                     (conn)
+                     (analytics/totals-query
+                      {:select-statement "SUM(`gallons`) as `gallons`"
+                       :from-date from-date
+                       :to-date to-date
+                       :timezone timezone
+                       :timeformat (analytics/timeframe->timeformat
+                                    timeframe)})
+                     response-type))))
+  (POST "/gallons-per-courier" {body :body}
+        (response (let [b (keywordize-keys body)
+                        {:keys [timeframe timezone response-type
+                                from-date to-date]} b]
+                    (analytics/per-courier-response
+                     (conn)
+                     (analytics/per-courier-query
+                      {:select-statement "SUM(`gallons`) AS `count`"
+                       :from-date from-date
+                       :to-date to-date
+                       :timezone timezone
+                       :timeformat (analytics/timeframe->timeformat
+                                    timeframe)})
+                     response-type))))
   ;;!! Marketing
   (POST "/send-push-to-table-view" {body :body}
         (response (let [b (keywordize-keys body)]
