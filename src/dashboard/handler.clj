@@ -580,6 +580,35 @@
                        :timeformat (analytics/timeframe->timeformat
                                     timeframe)})
                      response-type))))
+  ;; revenue
+  (POST "/total-revenue" {body :body}
+        (response (let [b (keywordize-keys body)
+                        {:keys [timezone timeframe response-type from-date
+                                to-date]} b]
+                    (analytics/total-for-select-response
+                     (conn)
+                     (analytics/totals-query
+                      {:select-statement "FORMAT(SUM(`total_price`) / 100,2) as `price`"
+                       :from-date from-date
+                       :to-date to-date
+                       :timezone timezone
+                       :timeformat (analytics/timeframe->timeformat
+                                    timeframe)})
+                     response-type))))
+  (POST "/revenue-per-courier" {body :body}
+        (response (let [b (keywordize-keys body)
+                        {:keys [timeframe timezone response-type
+                                from-date to-date]} b]
+                    (analytics/per-courier-response
+                     (conn)
+                     (analytics/per-courier-query
+                      {:select-statement "FORMAT(SUM(`total_price`) / 100,2) AS `count`"
+                       :from-date from-date
+                       :to-date to-date
+                       :timezone timezone
+                       :timeformat (analytics/timeframe->timeformat
+                                    timeframe)})
+                     response-type))))
   ;;!! Marketing
   (POST "/send-push-to-table-view" {body :body}
         (response (let [b (keywordize-keys body)]

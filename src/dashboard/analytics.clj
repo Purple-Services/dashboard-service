@@ -201,7 +201,7 @@
                                                        (fn [x] (>= x 3)))
                                 ])))
                       dates)))))))
-;; !! implement this tomorrow!
+
 (defn raw-sql-query
   "Given a raw query-vec, return the results"
   [db-conn query-vec]
@@ -209,6 +209,11 @@
     (sql/with-query-results results
       query-vec
       (doall results))))
+
+(defn sql-results
+  "Obtain results for sql string"
+  [db-conn sql]
+  (raw-sql-query db-conn [sql]))
 
 (defn concat-vector-at-idx
   "Concat a vector v at idx into host vector h"
@@ -273,6 +278,10 @@
   [event-log-name event]
   (str "substr(" event-log-name ",locate('" event "'," event-log-name ") + 9,10)"))
 
+;; timezone is a string and defaults to 'America/Los_Angeles' and depends on
+;; proper setup of the timezones table in mySQL.
+;; see: http://dev.mysql.com/doc/refman/5.7/en/time-zone-support.html
+
 (defn convert-datetime-timezone-to-UTC-mysql
   "Return a MySQL string for converting date in timezone to UTC unix timestamp"
   [datetime timezone]
@@ -304,6 +313,9 @@
          (convert-datetime-timezone-to-UTC-mysql to-date timezone) " ")))
 
 (defn totals-query
+  "Return a MySQL string for retrieving totals of select-statement for
+  completed orders in the range from-date to to-date using timezone.
+  timeformat can be generated from timeframe->timeformat"
   [{:keys [select-statement from-date to-date timezone timeformat]}]
   (str "select date_format(convert_tz(from_unixtime("
        (get-event-time-mysql "event_log" "complete")
@@ -330,6 +342,9 @@
        "');"))
 
 (defn per-courier-query
+  "Return a MySQL string for retrieving per-courier for select-statement for
+  completed orders in the range from-date to to-date using timezone.
+  timeformat can be generated from timeframe->timeformat"
   [{:keys [select-statement from-date to-date timezone timeformat]}]
   (str "SELECT (SELECT `users`.`name` AS `name` FROM `users` WHERE "
        "(`users`.`id` = `orders`.`courier_id`)) AS `name`, "
@@ -369,24 +384,9 @@
        timeformat
        "') asc;"))
 
-(defn sql-results
-  "Obtain date select-statement from database using db-conn where timeframe
-  is 'hourly', 'daily' or 'weekly', from-date and to-date are of the form
-  YYYY-MM-DD.
-  timezone is a string and defaults to 'America/Los_Angeles' and depends on
-  proper setup of the timezones table in mySQL.
-  see: http://dev.mysql.com/doc/refman/5.7/en/time-zone-support.html"
-  [db-conn sql timeframe from-date to-date & [timezone]]
-  (let [timezone (or timezone "America/Los_Angeles")
-        result
-        (raw-sql-query
-         db-conn
-         [sql])]
-    result))
-
 (defn total-for-select-response
-  "Provide a response for total-for-select. response-type is either 'json' or
-  'csv'"
+  "Provide a response from db-conn for sql generated using totals-query.
+  response-type is  either 'json' or 'csv'."
   [db-conn sql response-type]
   (let [query-result
         (raw-sql-query db-conn [sql])]
@@ -411,8 +411,8 @@
              :type "csv"}))))
 
 (defn per-courier-response
-  "Return a list of couriers and their total order count for timeframe using
-  optional timezone. default timezone is 'America/Los_Angeles'."
+  "Return a response from db-conn for sql generated using per-courier-query.
+  response-type is either 'json' or 'csv'."
   [db-conn sql response-type]
   (let [query-result (raw-sql-query db-conn [sql])]
     (cond (= response-type "csv")
