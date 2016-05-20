@@ -515,6 +515,12 @@
                    "text/csv; name=\"stats.csv\"")
            (header "Content-Disposition"
                    "attachment; filename=\"stats.csv\"")))
+  (GET "/download-view-csv/:view-name" [view-name]
+       (-> (response (analytics/download-view-csv view-name))
+           (header "Content-Type:"
+                   (str "text/csv; name=\"" view-name ".csv\""))
+           (header "Content-Disposition"
+                   (str "attachment; filename=\"" view-name ".csv\""))))
   (route/resources "/"))
 
 (defroutes all-routes

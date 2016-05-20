@@ -198,3 +198,15 @@
                                                        (fn [x] (>= x 3)))
                                 ])))
                       dates)))))))
+
+(defn download-view-csv
+  "Generates and saves a CSV file with some statistics."
+  [view-name]
+  (csv/write-csv
+   ;; no out-file, stream out
+
+   (when-let [results (!select (conn) view-name ["*"] {})]
+     (->> (concat [(map key (first results))] ;; header row
+                  (map vals results)) ;; data rows
+          (map (partial apply vector)) ;; convert inner lists to vectors
+          (apply vector))))) ;; convert outer list to vector
