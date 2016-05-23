@@ -246,7 +246,9 @@
    ...
    [:name_i date_count_1 ... date_count_i]
 
-  date_count_i is 0 when the corresponding vector for that date does not exist"
+  date_count_i is 0 when the corresponding vector for that date does not exist,
+  assuming all dates are represented in the maps. If a date is not present in
+  the maps, it will not be included in the output."
   [date-count-vec]
   (let [dates (->> date-count-vec
                    (map :date)
@@ -301,9 +303,7 @@
   "Return a MySQL string for retrieving event in event-log-name that occurs
   within from-date to to-date in timezone."
   [event-log-name event from-date to-date & [timezone]]
-  (let [timezone (or timezone "America/Los_Angeles")
-        from-date (str from-date " 00:00:00")
-        to-date   (str to-date " 23:59:59")]
+  (let [timezone (or timezone "America/Los_Angeles")]
     (str (get-event-time-mysql event-log-name event)
          " >= "
          (convert-datetime-timezone-to-UTC-mysql from-date timezone) " "
@@ -317,72 +317,77 @@
   completed orders in the range from-date to to-date using timezone.
   timeformat can be generated from timeframe->timeformat"
   [{:keys [select-statement from-date to-date timezone timeformat]}]
-  (str "select date_format(convert_tz(from_unixtime("
-       (get-event-time-mysql "event_log" "complete")
-       "),'UTC','"
-       timezone
-       "'),'"
-       timeformat
-       "') as 'date'"
-       ","
-       select-statement
-       " from orders where"
-       " status = 'complete' AND  "
-       (get-event-time-mysql "event_log" "complete")
-       " > 1420070400 "
-       "AND "
-       (get-event-within-time-range "event_log" "complete"
-                                    from-date
-                                    to-date)
-       "GROUP BY "
-       "date_format(convert_tz(from_unixtime("
-       (get-event-time-mysql "event_log" "complete")
-       "),'UTC','"
-       timezone "'),'" timeformat
-       "');"))
+  (let [from-date (str from-date " 00:00:00")
+        to-date   (str to-date " 23:59:59")]
+    (str "select date_format(convert_tz(from_unixtime("
+         (get-event-time-mysql "event_log" "complete")
+         "),'UTC','"
+         timezone
+         "'),'"
+         timeformat
+         "') as 'date'"
+         ","
+         select-statement
+         " from orders where"
+         " status = 'complete' AND  "
+         (get-event-time-mysql "event_log" "complete")
+         " > 1420070400 "
+         "AND "
+         (get-event-within-time-range "event_log" "complete"
+                                      from-date
+                                      to-date
+                                      timezone)
+         "GROUP BY "
+         "date_format(convert_tz(from_unixtime("
+         (get-event-time-mysql "event_log" "complete")
+         "),'UTC','"
+         timezone "'),'" timeformat
+         "');")))
 
 (defn per-courier-query
   "Return a MySQL string for retrieving per-courier for select-statement for
   completed orders in the range from-date to to-date using timezone.
   timeformat can be generated from timeframe->timeformat"
   [{:keys [select-statement from-date to-date timezone timeformat]}]
-  (str "SELECT (SELECT `users`.`name` AS `name` FROM `users` WHERE "
-       "(`users`.`id` = `orders`.`courier_id`)) AS `name`, "
-       "date_format(convert_tz(from_unixtime("
-       (get-event-time-mysql "`orders`.`event_log`" "complete")
-       "),'UTC','"
-       timezone
-       "'),'"
-       timeformat
-       "') "
-       "AS `date`, "
-       select-statement " "
-       "FROM `orders` "
-       "WHERE ((`orders`.`status` = 'complete') "
-       "AND (`orders`.`courier_id` <> '6nJd1SMjMnxxhUsKp3Nk')) "
-       "AND "
-       (get-event-time-mysql "event_log" "complete")
-       " > 1420070400 "
-       "AND "
-       (get-event-within-time-range "event_log" "complete"
-                                    from-date
-                                    to-date)
-       "GROUP BY"
-       " `orders`.`courier_id`,"
-       "date_format(convert_tz(from_unixtime("
-       (get-event-time-mysql "`orders`.`event_log`" "complete")
-       "),'UTC','"
-       timezone
-       "'),'"
-       timeformat
-       "') ORDER BY "
-       "date_format(convert_tz(from_unixtime("
-       (get-event-time-mysql "`orders`.`event_log`" "complete")
-       "),'UTC','"
-       timezone
-       "'),'"
-       timeformat
-       "') asc;"))
+  (let [from-date (str from-date " 00:00:00")
+        to-date   (str to-date " 23:59:59")]
+    (str "SELECT (SELECT `users`.`name` AS `name` FROM `users` WHERE "
+         "(`users`.`id` = `orders`.`courier_id`)) AS `name`, "
+         "date_format(convert_tz(from_unixtime("
+         (get-event-time-mysql "`orders`.`event_log`" "complete")
+         "),'UTC','"
+         timezone
+         "'),'"
+         timeformat
+         "') "
+         "AS `date`, "
+         select-statement " "
+         "FROM `orders` "
+         "WHERE ((`orders`.`status` = 'complete') "
+         "AND (`orders`.`courier_id` <> '6nJd1SMjMnxxhUsKp3Nk')) "
+         "AND "
+         (get-event-time-mysql "event_log" "complete")
+         " > 1420070400 "
+         "AND "
+         (get-event-within-time-range "event_log" "complete"
+                                      from-date
+                                      to-date)
+         "GROUP BY"
+         " `orders`.`courier_id`,"
+         "date_format(convert_tz(from_unixtime("
+         (get-event-time-mysql "`orders`.`event_log`" "complete")
+         "),'UTC','"
+         timezone
+         "'),'"
+         timeformat
+         "') ORDER BY "
+         "date_format(convert_tz(from_unixtime("
+         (get-event-time-mysql "`orders`.`event_log`" "complete")
+         "),'UTC','"
+         timezone
+         "'),'"
+         timeformat
+         "') asc;")))
 
 (defn total-for-select-response
   "Provide a response from db-conn for sql generated using totals-query.
@@ -422,3 +427,145 @@
                          (write-csv))]
             {:data csv
              :type "csv"}))))
+
+(defn schedule-time-where-statement
+  "Create a where statement from the map
+  {:start datetime :end datetime}"
+  [schedule-time timezone]
+  (let [{:keys [start end]} schedule-time]
+    (get-event-within-time-range "event_log" "complete"
+                                 start
+                                 end
+                                 timezone
+                                 )))
+
+(defn schedule-date-where-statements
+  "Given a vector of scheduled-times hash-map, create a where statement for each
+  date.
+  schedules-times is a vector of maps of the form
+
+  [{:start datetime
+    :end   datetime},
+     ... ]
+  "
+  [schedule-times timezone]
+  (str "(" (apply str (interpose
+                       " OR "
+                       (map #(let [{:keys [start end]} %]
+                               (str "("
+                                    (get-event-within-time-range "event_log"
+                                                                 "complete"
+                                                                 start
+                                                                 end
+                                                                 timezone)
+                                    ")"))
+                            schedule-times)))
+       ")"))
+
+(defn scheduled-orders-of-courier-sql
+  "Return a query for getting the schedule orders of courier-id
+  in the date range from-date to-date during scheduled-times. scheduled-times
+  is a vector of maps of the form
+
+  [{:start datetime
+    :end   datetime},
+     ... ]"
+  [{:keys [courier-id scheduled-times timezone timeframe]}]
+  (let [timeformat (timeframe->timeformat timeframe)]
+    (str  "SELECT (SELECT `users`.`name` AS `name` FROM `users` WHERE "
+          "(`users`.`id` = `orders`.`courier_id`)) AS `name`, "
+          "date_format(convert_tz(from_unixtime("
+          (get-event-time-mysql "`orders`.`event_log`" "complete")
+          "),'UTC','"
+          timezone
+          "'),'"
+          timeformat
+          "') "
+          "AS `date`, "
+          "count(0) AS `count` "
+          "FROM `orders` "
+          "WHERE ((`orders`.`status` = 'complete') "
+          "AND (`orders`.`courier_id` = '" courier-id "')) "
+          "AND "
+          (schedule-date-where-statements scheduled-times timezone)
+          "GROUP BY"
+          " `orders`.`courier_id`,"
+          "date_format(convert_tz(from_unixtime("
+          (get-event-time-mysql "`orders`.`event_log`" "complete")
+          "),'UTC','"
+          timezone
+          "'),'"
+          timeformat
+          "') ORDER BY "
+          "date_format(convert_tz(from_unixtime("
+          (get-event-time-mysql "`orders`.`event_log`" "complete")
+          "),'UTC','"
+          timezone
+          "'),'"
+          timeformat
+          "') asc;"
+          )))
+
+(defn get-scheduled-orders-of-courier
+  [{:keys [courier-id scheduled-times timezone timeframe db-conn]}]
+  (raw-sql-query db-conn [(scheduled-orders-of-courier-sql
+                           {:courier-id courier-id
+                            :scheduled-times scheduled-times
+                            :timezone timezone
+                            :timeframe timeframe})]))
+
+(defn get-daily-scheduled-orders-per-courier
+  "Get the orders that were completed during schedule for each courier
+  over the dates from-date to-date in timezone. schedule is a vector of maps
+  of the form
+  [{:courier-id \"oKQFyCgkwrn4YNtGlPbF\"
+    :scheduled-times [{:start \"2016-05-01 06:30:00\"
+                       :end \"2016-05-01 18:30:00\"},
+                       ...
+                      ]},
+   ...
+  ]
+  "
+  [{:keys [schedule timezone db-conn]}]
+  (map (fn [{:keys [courier-id scheduled-times]}]
+         (get-scheduled-orders-of-courier
+          {:courier-id courier-id
+           :scheduled-times scheduled-times
+           :timezone timezone
+           :timeframe "daily"
+           :db-conn db-conn
+           }))
+       schedule))
+
+(defn vector-of-scheduled-orders-count
+  "Create a vector of vectors for the count of orders for each courier made
+  while scheduled. see 'get-daily-scheduled-orders-per-courier' for more
+  information on params"
+  [{:keys [schedule timezone db-conn]}]
+  (transpose-dates (reduce concat
+                           (get-daily-scheduled-orders-per-courier
+                            {:schedule schedule
+                             :timezone timezone
+                             :db-conn db-conn}))))
+
+(defn scheduled-orders-response
+  "Return a response from db-conn using schedule and timezone that gives the
+  scheduled order count for each courier. The 'schedule order count' for each
+  courier is the amount of completed orders the courier did while scheduled.
+  schedule is a vector of maps of the form
+
+  [{:courier-id \"oKQFyCgkwrn4YNtGlPbF\"
+    :scheduled-times [{:start \"2016-05-01 06:30:00\"
+                       :end \"2016-05-01 18:30:00\"},
+                       ...
+                      ]},
+   ...,]
+  The data returned is in csv format"
+  [{:keys [schedule timezone db-conn]}]
+  (let [csv (-> (vector-of-scheduled-orders-count {:schedule schedule
+                                                   :timezone timezone
+                                                   :db-conn db-conn})
+                (vec-of-vec-elements->str)
+                (write-csv))]
+    {:data csv
+     :type csv}))
