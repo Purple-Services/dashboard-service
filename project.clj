@@ -3,6 +3,7 @@
   :url "https://dash.purpleapp.com"
   :dependencies [[org.clojure/clojure "1.7.0"]
                  [org.clojure/data.csv "0.1.3"]
+                 [org.clojure/core.memoize "0.5.8"]
                  [clojure-csv/clojure-csv "2.0.1"]
                  [net.mikera/core.matrix "0.52.0"]
                  [org.clojure/algo.generic "0.1.2"]

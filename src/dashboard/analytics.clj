@@ -9,6 +9,7 @@
             [clojure.data.csv :as csv]
             [clojure-csv.core :refer [write-csv]]
             [clojure.java.io :as io]
+            [clojure.core.memoize :refer [memo memo-clear!]]
             [clj-time.core :as time]
             [clj-time.periodic :as periodic]
             [clj-time.coerce :as time-coerce]
@@ -74,6 +75,9 @@
                                 (= (:user_id %) (:id user)))
                           orders))))
 
+(def get-first-order-by-user-memoized
+  (memo get-first-order-by-user))
+
 (defn users-ordered-to-date
   "Given a list of orders and a date, run a filter predicate to determine 
   cumulative orders. Example predicate to get all users who have ordered exactly
@@ -81,10 +85,11 @@
   [orders date pred]
   (count-filter pred (map :count (user-order-count-by-day orders date))))
 
+
 (defn made-first-order-this-day
   "Is this the date that the user made their first order?"
   [user date orders] ;; 'orders' is coll of all orders (by any user)
-  (when-let [first-order-by-user (get-first-order-by-user user orders)]
+  (when-let [first-order-by-user (get-first-order-by-user-memoized user orders)]
     (= date (unix->ymd (:target_time_start first-order-by-user)))))
 
 (defn gen-stats-csv
@@ -126,81 +131,83 @@
                   "Cumulative Single Order Users"
                   "Cumulative Double Order Users"
                   "Cumulative 3 or More Orders Users"]]
-                (pmap (fn [date]
-                        (let [us (get users-by-day date)
-                              os (get orders-by-day date)
+                (map (fn [date]
+                       (let [us (get users-by-day date)
+                             os (get orders-by-day date)
 
-                              num-complete ;; Number of complete orders that day
-                              (count-filter #(= "complete" (:status %)) os)
-                              
-                              num-complete-late ;; Completed, but late
-                              (count-filter #(let [completion-time
-                                                   (-> (str "kludgeFixLater 1|"
-                                                            (:event_log %))
-                                                       (s/split #"\||\s")
-                                                       (->> (apply hash-map))
-                                                       (get "complete"))]
-                                               (and completion-time
-                                                    (> (Integer. completion-time)
-                                                       (:target_time_end %))))
-                                            os)
+                             num-complete ;; Number of complete orders that day
+                             (count-filter #(= "complete" (:status %)) os)
 
-                              new-active-users ;; Made first order that day
-                              (count-filter #(made-first-order-this-day %
-                                                                        date
-                                                                        orders)
-                                            users)]
-                          (vec [;; date in "1989-08-01" format
-                                date
+                             num-complete-late ;; Completed, but late
+                             (count-filter #(let [completion-time
+                                                  (-> (str "kludgeFixLater 1|"
+                                                           (:event_log %))
+                                                      (s/split #"\||\s")
+                                                      (->> (apply hash-map))
+                                                      (get "complete"))]
+                                              (and completion-time
+                                                   (> (Integer. completion-time)
+                                                      (:target_time_end %))))
+                                           os)
 
-                                ;; new users (all)
-                                (count us)
-                                
-                                ;; made first order that day
-                                new-active-users
-                                
-                                ;; referral coupons
-                                (count-filter
-                                 #(and (not (s/blank? (:coupon_code %)))
-                                       (not (in? standard-coupon-codes
-                                                 (:coupon_code %))))
-                                 os)
+                             new-active-users ;; Made first order that day
+                             (count-filter #(made-first-order-this-day
+                                             %
+                                             date
+                                             orders)
+                                           users)]
+                         (vec [;; date in "1989-08-01" format
+                               date
 
-                                ;; standard coupons
-                                (count-filter
-                                 (comp (partial in? standard-coupon-codes)
-                                       :coupon_code)
-                                 os)
-                                
-                                ;; first-time orders
-                                new-active-users
+                               ;; new users (all)
+                               (count us)
 
-                                ;; recurrent
-                                (- (count os) new-active-users)
+                               ;; made first order that day
+                               new-active-users
 
-                                ;; cancelled
-                                (count-filter #(= "cancelled" (:status %)) os)
+                               ;; referral coupons
+                               (count-filter
+                                #(and (not (s/blank? (:coupon_code %)))
+                                      (not (in? standard-coupon-codes
+                                                (:coupon_code %))))
+                                os)
 
-                                ;; completed
-                                num-complete
+                               ;; standard coupons
+                               (count-filter
+                                (comp (partial in? standard-coupon-codes)
+                                      :coupon_code)
+                                os)
 
-                                ;; completed on-time
-                                (- num-complete num-complete-late)
+                               ;; first-time orders
+                               new-active-users
 
-                                ;; completed late
-                                num-complete-late
+                               ;; recurrent
+                               (- (count os) new-active-users)
 
-                                ;; cumulatively ordered once
-                                (users-ordered-to-date completed-orders date
-                                                       (fn [x] (= x 1)))
-                                ;; cumulatively ordered twice
-                                (users-ordered-to-date completed-orders date
-                                                       (fn [x] (= x 2)))
-                                ;; cumulatively ordered three or more times
-                                (users-ordered-to-date completed-orders date
-                                                       (fn [x] (>= x 3)))
-                                ])))
-                      dates)))))))
+                               ;; cancelled
+                               (count-filter #(= "cancelled" (:status %)) os)
+
+                               ;; completed
+                               num-complete
+
+                               ;; completed on-time
+                               (- num-complete num-complete-late)
+
+                               ;; completed late
+                               num-complete-late
+
+                               ;; cumulatively ordered once
+                               (users-ordered-to-date completed-orders date
+                                                      (fn [x] (= x 1)))
+                               ;; cumulatively ordered twice
+                               (users-ordered-to-date completed-orders date
+                                                      (fn [x] (= x 2)))
+                               ;; cumulatively ordered three or more times
+                               (users-ordered-to-date completed-orders date
+                                                      (fn [x] (>= x 3)))
+                               ])))
+                     dates))))))
+  (memo-clear! get-first-order-by-user-memoized))
 
 (defn raw-sql-query
   "Given a raw query-vec, return the results"
