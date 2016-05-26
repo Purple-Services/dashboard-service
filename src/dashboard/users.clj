@@ -155,3 +155,6 @@
         update-result))
     {:success false
      :validation (b/validate user user-validations)}))
+
+;; this is how to get the table views with arn_endpoint
+;; SELECT c.table_name FROM INFORMATION_SCHEMA.COLUMNS c INNER JOIN (SELECT table_name,table_type FROM information_schema.tables where table_schema = 'ebdb_prod' AND table_type = 'view') t ON c.table_name = t.table_name WHERE COLUMN_NAME IN ('arn_endpoint') AND TABLE_SCHEMA='ebdb_prod' ;
