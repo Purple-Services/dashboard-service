@@ -22,7 +22,8 @@
    :target_time_start :target_time_end :coupon_code :event_log
    :paid :stripe_charge_id :special_instructions
    :number_rating :text_rating
-   :payment_info :notes :admin_event_log :subscription_id])
+   :payment_info :notes :admin_event_log :subscription_id
+   :tire_pressure_check])
 
 (defn include-user-name-phone-and-courier
   "Given a vector of orders, assoc the user name, phone number and courier
