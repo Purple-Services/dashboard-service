@@ -12,3 +12,4 @@ pom.xml.asc
 *~
 stats.csv
 *profiles.clj
+.DS_Store
