@@ -14,7 +14,8 @@
    :app_version :stripe_default_card
    :stripe_cards :sift_score
    :arn_endpoint :timestamp_created
-   :referral_gallons :admin_event_log])
+   :referral_gallons :admin_event_log
+   :subscription_id])
 
 (defn process-admin-log
   [log admins]
