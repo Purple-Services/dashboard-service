@@ -144,6 +144,9 @@
    {:uri "/users-count"
     :method "GET"
     :permissions ["view-users" "view-orders"]}
+   {:uri "/members-count"
+    :method "GET"
+    :permissions ["view-users" "view-orders"]}
    {:uri "/send-push-to-all-active-users"
     :method "POST"
     :permissions ["view-users" "send-push"]}
@@ -359,6 +362,12 @@
        (response
         (into []
               (!select (conn) "users" ["count(*) as total"] {}))))
+  (GET "/members-count" []
+       (response
+        (into []
+              (!select (conn) "users" ["count(*) as total"] {}
+                       :custom-where
+                       (str "`subscription_id` > 0")))))
   (POST "/send-push-to-all-active-users" {body :body}
         (response
          (let [b (keywordize-keys body)]
