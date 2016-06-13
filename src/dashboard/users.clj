@@ -29,14 +29,18 @@
 
 (defn process-user
   "Process a user to be included as a JSON response"
-  [user admins]
-  (assoc user
-         :timestamp_created
-         (/ (.getTime
-             (:timestamp_created user))
-            1000)
-         :admin_event_log
-         (process-admin-log (:admin_event_log user) admins)))
+  [user admins db-conn]
+  (let [orders-count (:total
+                      (first (!select db-conn "orders" ["count(*) as total"]
+                                      {:user_id (:id user)})))]
+    (assoc user
+           :timestamp_created
+           (/ (.getTime
+               (:timestamp_created user))
+              1000)
+           :admin_event_log
+           (process-admin-log (:admin_event_log user) admins)
+           :orders_count orders-count)))
 
 (defn dash-users
   "Return all users who are either couriers or a user who has placed an
@@ -65,7 +69,7 @@
                                                        courier-ids)))
                               "\")")))
         admins (!select db-conn "dashboard_users" [:email :id] {})]
-    (map #(process-user % admins) users)))
+    (map #(process-user % admins db-conn) users)))
 
 (defn send-push-to-all-active-users
   [db-conn message]
@@ -115,7 +119,7 @@
                             "OR `email` LIKE '%" escaped-term "%' "
                             "OR `referral_code` LIKE '%" escaped-term "%'")
                        :append "ORDER BY timestamp_created LIMIT 100")]
-    (map #(process-user % admins) users)))
+    (map #(process-user % admins db-conn) users)))
 
 (def user-validations
   {:referral_gallons [

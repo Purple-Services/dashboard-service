@@ -337,12 +337,14 @@
   ;; get a user by id
   (GET "/user/:id" [id]
        (response
-        (into []
-              (->
-               (users/get-user-by-id (conn) id)
-               (process-user (!select
-                              (conn) "dashboard_users" [:email :id] {}))
-               list))))
+        (let [db-conn (conn)]
+          (into []
+                (->
+                 (users/get-user-by-id (conn) id)
+                 (process-user (!select
+                                db-conn "dashboard_users" [:email :id] {})
+                               db-conn)
+                 list)))))
   ;; edit an existing user
   (PUT "/user" [:as {body :body
                      cookies :cookies}]
