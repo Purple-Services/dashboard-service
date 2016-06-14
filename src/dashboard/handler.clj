@@ -656,6 +656,67 @@
                        :timeformat (analytics/timeframe->timeformat
                                     timeframe)})
                      response-type))))
+  ;; Service Fees
+  (POST "/service-fees" {body :body}
+        (response (let [b (keywordize-keys body)
+                        {:keys [timezone timeframe response-type from-date
+                                to-date]} b]
+                    (analytics/total-for-select-response
+                     (conn)
+                     (analytics/totals-query
+                      {:select-statement "FORMAT(SUM(`service_fee`) / 100,2) as `service_fee`"
+                       :from-date from-date
+                       :to-date to-date
+                       :timezone timezone
+                       :timeformat (analytics/timeframe->timeformat
+                                    timeframe)})
+                     response-type))))
+  (POST "/service-fees-per-courier" {body :body}
+        (response (let [b (keywordize-keys body)
+                        {:keys [timeframe timezone response-type
+                                from-date to-date]} b]
+                    (analytics/per-courier-response
+                     (conn)
+                     (analytics/per-courier-query
+                      {:select-statement "FORMAT(SUM(`service_fee`) / 100,2) AS `count`"
+                       :from-date from-date
+                       :to-date to-date
+                       :timezone timezone
+                       :timeformat (analytics/timeframe->timeformat
+                                    timeframe)})
+                     response-type))))
+  ;; Referral Gallon Discount
+  (POST "/referral-gallons-cost" {body :body}
+        (response (let [b (keywordize-keys body)
+                        {:keys [timezone timeframe response-type from-date
+                                to-date]} b]
+                    (analytics/total-for-select-response
+                     (conn)
+                     (analytics/totals-query
+                      {:select-statement "FORMAT(SUM(`referral_gallons_used` * `gas_price`) / 100,2) as `ref_gal_cost`"
+                       :from-date from-date
+                       :to-date to-date
+                       :timezone timezone
+                       :timeformat (analytics/timeframe->timeformat
+                                    timeframe)})
+                     response-type))))
+  (POST "/referral-gallons-cost-per-courier" {body :body}
+        (response (let [b (keywordize-keys body)
+                        {:keys [timeframe timezone response-type
+                                from-date to-date]} b]
+                    (analytics/per-courier-response
+                     (conn)
+                     (analytics/per-courier-query
+                      {:select-statement "FORMAT(SUM(`referral_gallons_used` * `gas_price`) / 100,2) AS `count`"
+                       :from-date from-date
+                       :to-date to-date
+                       :timezone timezone
+                       :timeformat (analytics/timeframe->timeformat
+                                    timeframe)})
+                     response-type))))
+  ;; Coupon Discount
+  ;; Subscription Discounts
+  ;; Monthly subscriptions
   ;;!! Marketing
   (POST "/send-push-to-table-view" {body :body}
         (response (let [b (keywordize-keys body)]
