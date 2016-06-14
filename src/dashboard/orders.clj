@@ -309,3 +309,11 @@
                              "OR `coupon_code` LIKE '%" escaped-term "%'")
                         :append "ORDER BY target_time_start LIMIT 100")]
     (process-orders orders db-conn)))
+
+(defn orders-by-user-id
+  "Retrieve all orders made by user-id"
+  [db-conn user-id]
+  (process-orders (!select db-conn "orders" orders-select
+                           {:user_id user-id}
+                           :append "ORDER BY target_time_start DESC")
+                  db-conn))

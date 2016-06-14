@@ -32,7 +32,8 @@
                                       orders-since-date
                                       search-orders
                                       update-order!
-                                      cancel-order]]
+                                      cancel-order
+                                      orders-by-user-id]]
             [dashboard.pages :as pages]
             [dashboard.users :refer [dash-users
                                      process-user
@@ -385,6 +386,12 @@
        (response
         (into []
               (search-users (conn) term))))
+  ;; get all orders for a user
+  (GET "/users/orders/:id" [id]
+       (response
+        (let [db-conn (conn)]
+          (into []
+                (orders-by-user-id db-conn id)))))
   ;;!! coupons
   ;; get a coupon by id
   (GET "/coupon/:id" [id]
