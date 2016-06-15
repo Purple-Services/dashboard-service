@@ -715,7 +715,21 @@
                                     timeframe)})
                      response-type))))
   ;; Coupon Discount
-  ;; Subscription Discounts
+  (POST "/coupon-cost" {body :body}
+        (response (let [b (keywordize-keys body)
+                        {:keys [timezone timeframe response-type from-date
+                                to-date]} b]
+                    (analytics/total-for-select-response
+                     (conn)
+                     (analytics/totals-query
+                      {:select-statement "format(sum(service_fee + (gas_price * (gallons - referral_gallons_used) - total_price))/100,2) as `coupon_value`"
+                       :from-date from-date
+                       :to-date to-date
+                       :timezone timezone
+                       :timeformat (analytics/timeframe->timeformat
+                                    timeframe)
+                       :where-clause "AND `user_id` NOT IN ('evU83hVPIbccvZE0C2uL','nszMr7cDRfRrbTksXaEC','k4KTi1xmes8LLd9ZZhsH')"})
+                     response-type))))
   ;; Monthly subscriptions
   ;;!! Marketing
   (POST "/send-push-to-table-view" {body :body}

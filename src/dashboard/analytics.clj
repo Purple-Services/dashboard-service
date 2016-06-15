@@ -304,6 +304,7 @@
     "hourly" "%Y-%m-%d %H"
     "daily" "%Y-%m-%d"
     "weekly" "%Y-%U"
+    "monthly" "%Y-%m"
     "%Y-%m-%d"))
 
 (defn get-event-within-time-range
@@ -323,7 +324,7 @@
   "Return a MySQL string for retrieving totals of select-statement for
   completed orders in the range from-date to to-date using timezone.
   timeformat can be generated from timeframe->timeformat"
-  [{:keys [select-statement from-date to-date timezone timeformat]}]
+  [{:keys [select-statement from-date to-date timezone timeformat where-clause]}]
   (let [from-date (str from-date " 00:00:00")
         to-date   (str to-date " 23:59:59")]
     (str "select date_format(convert_tz(from_unixtime("
@@ -344,6 +345,8 @@
                                       from-date
                                       to-date
                                       timezone)
+         (when where-clause
+           (str where-clause " "))
          "GROUP BY "
          "date_format(convert_tz(from_unixtime("
          (get-event-time-mysql "event_log" "complete")
@@ -355,7 +358,7 @@
   "Return a MySQL string for retrieving per-courier for select-statement for
   completed orders in the range from-date to to-date using timezone.
   timeformat can be generated from timeframe->timeformat"
-  [{:keys [select-statement from-date to-date timezone timeformat]}]
+  [{:keys [select-statement from-date to-date timezone timeformat where-clause]}]
   (let [from-date (str from-date " 00:00:00")
         to-date   (str to-date " 23:59:59")]
     (str "SELECT (SELECT `users`.`name` AS `name` FROM `users` WHERE "
@@ -379,6 +382,8 @@
          (get-event-within-time-range "event_log" "complete"
                                       from-date
                                       to-date)
+         (when where-clause
+           (str where-clause " "))
          "GROUP BY"
          " `orders`.`courier_id`,"
          "date_format(convert_tz(from_unixtime("
