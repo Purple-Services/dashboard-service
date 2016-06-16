@@ -722,7 +722,7 @@
                     (analytics/total-for-select-response
                      (conn)
                      (analytics/totals-query
-                      {:select-statement "format(sum(service_fee + (gas_price * (gallons - referral_gallons_used) - total_price))/100,2) as `coupon_value`"
+                      {:select-statement "format(abs(sum(service_fee + (gas_price * (gallons - referral_gallons_used) - total_price))/100),2) as `coupon_value`"
                        :from-date from-date
                        :to-date to-date
                        :timezone timezone
