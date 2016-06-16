@@ -32,7 +32,15 @@
   [user admins db-conn]
   (let [orders-count (:total
                       (first (!select db-conn "orders" ["count(*) as total"]
-                                      {:user_id (:id user)})))]
+                                      {:user_id (:id user)})))
+        last-active (:target_time_start
+                     (first (!select
+                             db-conn
+                             "orders"
+                             [:target_time_start]
+                             {:user_id (:id user)}
+                             :append "ORDER BY target_time_start DESC LIMIT 1"
+                             )))]
     (assoc user
            :timestamp_created
            (/ (.getTime
@@ -40,7 +48,8 @@
               1000)
            :admin_event_log
            (process-admin-log (:admin_event_log user) admins)
-           :orders_count orders-count)))
+           :orders_count orders-count
+           :last_active last-active)))
 
 (defn dash-users
   "Return all users who are either couriers or a user who has placed an
