@@ -370,7 +370,7 @@
         (into []
               (!select (conn) "users" ["count(*) as total"] {}
                        :custom-where
-                       (str "`subscription_id` > 0")))))
+                       (str "`subscription_id` > 0 AND `subscription_id` < 3")))))
   (POST "/send-push-to-all-active-users" {body :body}
         (response
          (let [b (keywordize-keys body)]

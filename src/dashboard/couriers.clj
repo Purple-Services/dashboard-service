@@ -113,22 +113,35 @@
                (every? identity (map (fn [zone]
                                        (contains? existant-zones-set zone))
                                      zones)))
-            :message (str "All zones in assignment must exist")]]})
+            :message (str "All zones in assignment must exist")]]
+   :active [v/required v/boolean]})
 
 (defn update-courier!
   "Update the zones for courier with user-id"
   [db-conn courier]
   ;; make sure the zones string will split into valid edn elements
   (if (b/valid? courier courier-validations)
-    (let [zones-str (->> (:zones courier)
+    (let [{:keys [id zones active]} courier
+          zones-str (->> zones
                          split-on-comma
                          (map edn/read-string)
                          (filter (comp not nil?))
                          set
                          sort
-                         (s/join ","))]
-      (assoc
-       (!update db-conn "couriers" {:zones zones-str} {:id (:id courier)})
-       :id (:id courier)))
+                         (s/join ","))
+          ;; have to manually get this, get-by-id for courier process
+          ;; the courier and leads to problems with timestamp_created
+          db-courier (first (!select db-conn "couriers"
+                                     ["*"]
+                                     {:id id}))
+          update-result (!update db-conn "couriers"
+                                 (assoc db-courier
+                                        :zones zones-str
+                                        :active active)
+                                 {:id id})]
+      (if (:success update-result)
+        (assoc update-result :id (:id db-courier))
+        {:success false
+         :message "database errror"}))
     {:success false
      :validation (b/validate courier courier-validations)}))
