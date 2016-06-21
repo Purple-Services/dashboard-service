@@ -8,11 +8,12 @@
             [common.db :refer [conn !select !update mysql-escape-str]]
             [opt.planner :refer [compute-distance]]
             [common.config :as config]
+            [common.couriers :as couriers]
             [common.users :as users]
             [common.util :refer [in? map->java-hash-map split-on-comma]]
             [common.zones :refer [get-all-zones-from-db
                                   get-zones]]
-            [common.orders :refer [get-by-id cancel]]))
+            [common.orders :as orders]))
 
 (def orders-select
   [:id :lat :lng :status :gallons :gas_type
@@ -219,7 +220,7 @@
   [db-conn order]
   (if (b/valid? order order-validations)
     (let [{:keys [admin-id id cancel_reason notes]} order
-          current-order (get-by-id db-conn id)
+          current-order (orders/get-by-id db-conn id)
           new-order (-> current-order
                         (add-cancel-reason cancel_reason admin-id)
                         (add-notes notes))
@@ -249,7 +250,7 @@
 (defn cancel-order
   "Cancel an order and create an entry in the admin_event_log"
   [db-conn user-id order-id admin-id cancel-reason]
-  (let [cancel-response (cancel
+  (let [cancel-response (orders/cancel
                          (conn)
                          user-id
                          order-id
@@ -258,7 +259,7 @@
                          :suppress-user-details true
                          :override-cancellable-statuses
                          (conj config/cancellable-statuses "servicing"))
-        current-order  (get-by-id db-conn order-id)
+        current-order  (orders/get-by-id db-conn order-id)
         event          {:timestamp (quot (System/currentTimeMillis) 1000)
                         :admin_id admin-id
                         :action "cancel-order"
@@ -272,7 +273,7 @@
                      {:id order-id})
             {:success true
              :order (first (process-orders
-                            [(get-by-id db-conn order-id)]
+                            [(orders/get-by-id db-conn order-id)]
                             db-conn))})
           :else cancel-response)))
 
@@ -317,3 +318,129 @@
                            {:user_id user-id}
                            :append "ORDER BY target_time_start DESC")
                   db-conn))
+
+(defn update-status-by-admin
+  "Change the status of order-id to new-status"
+  [db-conn order-id new-status]
+  (if-let [order (orders/get-by-id db-conn order-id)]
+    (let [current-status (:status order)
+          advanced-status (orders/next-status current-status)]
+      ;; Orders with "complete", "cancelled" or "unassigned" statuses can not be
+      ;; advanced. These orders should not be modifiable in the dashboard
+      ;; console, however this is checked on the server below.
+      (cond
+        (contains? #{"complete" "cancelled" "unassigned"} (:status order))
+        {:success false
+         :message (str "An order's status can not be advanced if it is already "
+                       "complete, cancelled, or unassigned.")}
+        ;; Likewise, the dashboard user should not be allowed to advanced
+        ;; to "assigned", but we check it on the server anyway.
+        (contains? #{"assigned"} advanced-status)
+        {:success false
+         :message (str "An order's status can not be advanced to assigned. "
+                       "Please assign a courier to this order in "
+                       "order to advance this order.")}
+        ;; the next-status of an order should correspond to the status
+        ;; update the status to "accepted", if not it is an error
+        (not= advanced-status new-status)
+        {:success false
+         :message (str "This order's current status is '" current-status
+                       "' and can not be advanced to '" new-status "'")}
+        (= advanced-status "accepted")
+        (do (orders/accept db-conn order-id)
+            ;; let the courier know
+            (users/send-push
+             db-conn (:courier_id order)
+             "An order that was assigned to you is now marked as Accepted.")
+            {:success true
+             :message advanced-status})
+        ;; update the status to "enroute"
+        (= advanced-status "enroute")
+        (do (orders/begin-route db-conn order)
+            ;; let the courier know
+            (users/send-push db-conn (:courier_id order)
+                             "Your order status has been advanced to enroute.")
+            {:success true
+             :message advanced-status})
+        ;; update the status to "servicing"
+        (= advanced-status "servicing")
+        (do (orders/service db-conn order)
+            ;; let the courier know
+            (users/send-push
+             db-conn (:courier_id order)
+             "Your order status has been advanced to servicing.")
+            {:success true
+             :message advanced-status})
+        ;; update the order to "complete"
+        (= advanced-status "complete")
+        (do (orders/complete db-conn order)
+            ;; let the courier know
+            (users/send-push db-conn (:courier_id order)
+                             "Your order status has been advanced to complete.")
+            {:success true
+             :message advanced-status})
+        ;; something wasn't caught
+        :else {:success false
+               :message "An unknown error occured."
+               :status advanced-status}))
+    ;; the order was not found on the server
+    {:success false
+     :message "An order with that ID could not be found."}))
+
+(defn assign-to-courier-by-admin
+  "Assign new-courier-id to order-id and alert the couriers of the
+  order reassignment"
+  [db-conn order-id new-courier-id]
+  (let [order (orders/get-by-id db-conn order-id)
+        old-courier-id (:courier_id order)
+        change-order-assignment #(!update db-conn "orders"
+                                          {:courier_id new-courier-id}
+                                          {:id order-id})
+        notify-new-courier #(do (users/send-push
+                                 db-conn new-courier-id
+                                 (str "You have been assigned a new order,"
+                                      " please check your "
+                                      "Orders to view it"))
+                                (users/text-user
+                                 db-conn new-courier-id
+                                 (orders/new-order-text db-conn order true)))
+        notify-old-courier #(users/send-push
+                             db-conn old-courier-id
+                             (str "You are no longer assigned to the order at: "
+                                  (:address_street order)))]
+    (cond
+      (= (:status order) "unassigned")
+      (do
+        ;; because the accept fn sets the couriers busy status to true,
+        ;; there is no need to further update the courier's status
+        (orders/assign db-conn order-id new-courier-id)
+        ;; response
+        {:success true
+         :message (str order-id " has been assigned to " new-courier-id)})
+      (contains? #{"assigned" "accepted" "enroute" "servicing"} (:status order))
+      (do
+        ;; update the order so that is assigned to new-courier-id
+        (change-order-assignment)
+        ;; set the new-courier to busy
+        (couriers/set-courier-busy db-conn new-courier-id true)
+        ;; adjust old courier to correct busy setting
+        (couriers/update-courier-busy db-conn old-courier-id)
+        ;; notify the new-courier that they have a new order
+        (notify-new-courier)
+        ;; notify the old-courier that they lost an order
+        (notify-old-courier)
+        ;; response
+        {:success true
+         :message (str order-id " has been assigned from " new-courier-id " to "
+                       old-courier-id)})
+      (contains? #{"complete" "cancelled"} (:status order))
+      (do
+        ;; update the order so that is assigned to new-courier
+        (change-order-assignment)
+        ;; response
+        {:success true
+         :message (str order-id " has been assigned from " new-courier-id " to "
+                       old-courier-id)})
+      :else
+      {:success false
+       :message "An unknown error occured."})))
