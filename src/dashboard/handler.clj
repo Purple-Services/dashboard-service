@@ -33,7 +33,9 @@
                                       search-orders
                                       update-order!
                                       cancel-order
-                                      orders-by-user-id]]
+                                      orders-by-user-id
+                                      update-status-by-admin
+                                      assign-to-courier-by-admin]]
             [dashboard.pages :as pages]
             [dashboard.users :refer [dash-users
                                      process-user
@@ -495,14 +497,14 @@
         (response
          (let [b (keywordize-keys body)
                {:keys [order_id new-status]} b]
-           (orders/update-status-by-admin (conn) order_id new-status))))
+           (update-status-by-admin (conn) order_id new-status))))
   ;; admin assigns courier to an order
   (POST "/assign-order" {body :body}
         (response
          (let [b (keywordize-keys body)]
-           (orders/assign-to-courier-by-admin (conn)
-                                              (:order_id b)
-                                              (:courier_id b)))))
+           (assign-to-courier-by-admin (conn)
+                                       (:order_id b)
+                                       (:courier_id b)))))
   ;; given a date in the format yyyy-mm-dd, return all orders
   ;; that have occurred since then
   (POST "/orders-since-date"  {body :body}
