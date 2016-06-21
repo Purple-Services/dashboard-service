@@ -493,9 +493,9 @@
   ;; admin updates status of order (e.g., enroute -> servicing)
   (POST "/update-status" {body :body}
         (response
-         (let [b (keywordize-keys body)]
-           (orders/update-status-by-admin (conn)
-                                          (:order_id b)))))
+         (let [b (keywordize-keys body)
+               {:keys [order_id new-status]} b]
+           (orders/update-status-by-admin (conn) order_id new-status))))
   ;; admin assigns courier to an order
   (POST "/assign-order" {body :body}
         (response
