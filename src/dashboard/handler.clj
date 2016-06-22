@@ -43,6 +43,7 @@
                                      send-push-to-all-active-users
                                      send-push-to-users-list
                                      send-push-to-table-view
+                                     send-push-to-user
                                      update-user!]]
             [dashboard.zones :refer [get-zone-by-id
                                      read-zone-strings
@@ -154,6 +155,9 @@
     :method "POST"
     :permissions ["view-users" "send-push"]}
    {:uri "/send-push-to-users-list"
+    :method "POST"
+    :permissions ["view-users" "send-push"]}
+   {:uri "/send-push-to-user"
     :method "POST"
     :permissions ["view-users" "send-push"]}
    ;;!! coupons
@@ -384,6 +388,13 @@
            (send-push-to-users-list (conn)
                                     (:message b)
                                     (:user-ids b)))))
+  (POST "/send-push-to-user" {body :body}
+        (response
+         (let [b (keywordize-keys body)
+               {:keys [message user-id]} b]
+           (send-push-to-user (conn)
+                              message
+                              user-id))))
   (GET "/users/search/:term" [term]
        (response
         (into []
