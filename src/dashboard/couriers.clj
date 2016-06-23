@@ -76,6 +76,26 @@
                     :app_version (:app_version user-courier))))
          m)))
 
+(defn include-arn-endpoint
+  "Given a hash-map of couriers m, return a map with :arn_endpoint assoc'd onto
+  each courier"
+  [db-conn m]
+  (let [courier-ids (distinct (map :id m))
+        courier-users (!select db-conn "users"
+                               [:arn_endpoint :id]
+                               {}
+                               :custom-where
+                               (str "id IN (\""
+                                    (s/join "\",\"" (concat courier-ids))
+                                    "\")"))]
+    (map (fn [courier]
+           (let [user-courier (first
+                               (filter #(= (:id courier) (:id %))
+                                       courier-users))]
+             (assoc courier
+                    :arn_endpoint (:arn_endpoint user-courier))))
+         m)))
+
 (defn edn-read?
   "Attempt to read x with edn/read-string, return true if x can be read,false
   otherwise "

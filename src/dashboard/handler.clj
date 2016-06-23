@@ -21,7 +21,8 @@
                                        update-standard-coupon!]]
             [dashboard.couriers :refer [get-by-id include-lateness
                                         update-courier!
-                                        include-os-and-app-version]]
+                                        include-os-and-app-version
+                                        include-arn-endpoint]]
             [dashboard.login :as login]
             [dashboard.orders :refer [include-eta
                                       include-user-name-phone-and-courier
@@ -325,7 +326,9 @@
               (->> (get-by-id (conn) id)
                    list
                    (users/include-user-data (conn))
-                   (include-lateness (conn))))))
+                   (include-lateness (conn))
+                   (include-os-and-app-version (conn))
+                   (include-arn-endpoint (conn))))))
   ;; update a courier
   ;; currently, only the zones can be updated
   (PUT "/courier" {body :body}
@@ -339,7 +342,8 @@
            {:couriers (->> (couriers/all-couriers (conn))
                            (users/include-user-data (conn))
                            (include-lateness (conn))
-                           (include-os-and-app-version (conn)))})))
+                           (include-os-and-app-version (conn))
+                           (include-arn-endpoint (conn)))})))
   ;;!! users
   ;; get a user by id
   (GET "/user/:id" [id]
