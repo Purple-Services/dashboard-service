@@ -112,20 +112,18 @@
 
 (defn send-push-to-user
   [db-conn message user-id]
-  ;; (do (future (run! #(send-push db-conn (:id %) message)
-  ;;                   (!select db-conn
-  ;;                            "users"
-  ;;                            [:id :name]
-  ;;                            {}
-  ;;                            :custom-where
-  ;;                            (str "id IN (\""
-  ;;                                 (->> user-id
-  ;;                                      (mysql-escape-str)
-  ;;                                      (apply str))
-  ;;                                 "\")"))))
-  ;;     {:success true})
-  {:success true}
-  )
+  (do (future (run! #(send-push db-conn (:id %) message)
+                    (!select db-conn
+                             "users"
+                             [:id :name]
+                             {}
+                             :custom-where
+                             (str "id IN (\""
+                                  (->> user-id
+                                       (mysql-escape-str)
+                                       (apply str))
+                                  "\")"))))
+      {:success true}))
 
 (defn search-users
   "Search users by term"
