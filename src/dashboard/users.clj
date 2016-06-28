@@ -15,7 +15,7 @@
    :stripe_cards :sift_score
    :arn_endpoint :timestamp_created
    :referral_gallons :admin_event_log
-   :subscription_id])
+   :subscription_id :referral_code])
 
 (defn process-admin-log
   [log admins]
