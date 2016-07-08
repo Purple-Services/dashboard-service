@@ -45,7 +45,8 @@
                                      send-push-to-users-list
                                      send-push-to-table-view
                                      send-push-to-user
-                                     update-user!]]
+                                     update-user!
+                                     convert-to-courier!]]
             [dashboard.zones :refer [get-zone-by-id
                                      read-zone-strings
                                      validate-and-update-zone!]]
@@ -161,6 +162,9 @@
    {:uri "/send-push-to-user"
     :method "POST"
     :permissions ["view-users" "send-push"]}
+   {:uri "/users/convert-to-courier"
+    :method "PUT"
+    :permissions ["convert-to-courier"]}
    ;;!! coupons
    {:uri "/coupon/:code"
     :method "GET"
@@ -403,6 +407,10 @@
        (response
         (into []
               (search-users (conn) term))))
+  (PUT "/users/convert-to-courier" {body :body}
+       (println body)
+       (response
+        (convert-to-courier! (conn) (:user (keywordize-keys body)))))
   ;; get all orders for a user
   (GET "/users/orders/:id" [id]
        (response

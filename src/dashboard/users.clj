@@ -5,7 +5,7 @@
             [clojure.set :refer [join]]
             [clojure.string :as s]
             [crypto.password.bcrypt :as bcrypt]
-            [common.db :refer [mysql-escape-str !select !update]]
+            [common.db :refer [mysql-escape-str !select !update !insert]]
             [common.users :refer [send-push get-user-by-id]]
             [common.util :refer [in? sns-publish sns-client sns-client]]))
 
@@ -187,3 +187,31 @@
 
 ;; this is how to get the table views with arn_endpoint
 ;; SELECT c.table_name FROM INFORMATION_SCHEMA.COLUMNS c INNER JOIN (SELECT table_name,table_type FROM information_schema.tables where table_schema = 'ebdb_prod' AND table_type = 'view') t ON c.table_name = t.table_name WHERE COLUMN_NAME IN ('arn_endpoint') AND TABLE_SCHEMA='ebdb_prod' ;
+
+
+;;curl 'http://localhost:3001/users/convert-to-courier' -X PUT -H 'Content-Type: application/json' -H 'Cookie: token=YfZmnG0hqYlC5opndFasR1lvWzQKRFM7pwFk6wZdMnPE29yodw8ANVCR0exmk8kmSV7Zcto27yzKttp8nstjDLWu47iejts4dyiwBKVb9ejCP6wRbE8eo04frtGPEGjL; user-id=BCzKBHrWlJz9fddj7Xmc' -d '{"user": {"id":"IVN6rQbtkJiifeRXSFXd"}}'
+(defn convert-to-courier!
+  "Convert a user to a courier. This creates a courier account"
+  [db-conn user]
+  (let [{:keys [id]} user
+        new-courier-result (!insert db-conn "couriers"
+                                    {:id id
+                                     :active 1
+                                     :busy 0
+                                     :lat 0
+                                     :lng 0
+                                     :zones ""
+                                     })
+        set-is-courier-result (!update db-conn "users" {:is_courier 1} {:id id})]
+    (cond (and (:success new-courier-result)
+               (:success set-is-courier-result))
+          {:success true
+           :message "User successfully converted to a courier."}
+          (not (:success set-is-courier-result))
+          {:success false
+           :message "User could not be updated"}
+          (not (:success new-courier-result))
+          {:success false
+           :messasge "Courier account could not be created"}
+          :else {:success false
+                 :message "Unknown error occured"})))
