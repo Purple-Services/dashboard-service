@@ -408,7 +408,6 @@
         (into []
               (search-users (conn) term))))
   (PUT "/users/convert-to-courier" {body :body}
-       (println body)
        (response
         (convert-to-courier! (conn) (:user (keywordize-keys body)))))
   ;; get all orders for a user
