@@ -15,7 +15,7 @@
    :stripe_cards :sift_score
    :arn_endpoint :timestamp_created
    :referral_gallons :admin_event_log
-   :subscription_id :referral_code])
+   :subscription_id :referral_code :is_courier])
 
 (defn process-admin-log
   [log admins]
@@ -193,25 +193,35 @@
 (defn convert-to-courier!
   "Convert a user to a courier. This creates a courier account"
   [db-conn user]
-  (let [{:keys [id]} user
-        new-courier-result (!insert db-conn "couriers"
-                                    {:id id
-                                     :active 1
-                                     :busy 0
-                                     :lat 0
-                                     :lng 0
-                                     :zones ""
-                                     })
-        set-is-courier-result (!update db-conn "users" {:is_courier 1} {:id id})]
-    (cond (and (:success new-courier-result)
-               (:success set-is-courier-result))
-          {:success true
-           :message "User successfully converted to a courier."}
-          (not (:success set-is-courier-result))
-          {:success false
-           :message "User could not be updated"}
-          (not (:success new-courier-result))
-          {:success false
-           :messasge "Courier account could not be created"}
-          :else {:success false
-                 :message "Unknown error occured"})))
+  (let [{:keys [id]} user]
+    (if (> (:total
+            (first (!select db-conn "orders" ["count(*) as total"]
+                            {:user_id (:id user)})))
+           0)
+      {:success false
+       :message (str "This user already has already made order requests as a "
+                     "customer! A courier can not have any fuel delivery "
+                     "requests. They will need to create another user "
+                     "account with an email address that is different from "
+                     "their customer account.")}
+      (let [new-courier-result (!insert db-conn "couriers"
+                                        {:id id
+                                         :active 1
+                                         :busy 0
+                                         :lat 0
+                                         :lng 0
+                                         :zones ""})
+            set-is-courier-result (!update db-conn "users"
+                                           {:is_courier 1} {:id id})]
+        (cond (and (:success new-courier-result)
+                   (:success set-is-courier-result))
+              {:success true
+               :message "User successfully converted to a courier."}
+              (not (:success set-is-courier-result))
+              {:success false
+               :message "User could not be updated"}
+              (not (:success new-courier-result))
+              {:success false
+               :message "Courier account could not be created"}
+              :else {:success false
+                     :message "Unknown error occured"})))))
