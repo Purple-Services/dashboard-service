@@ -15,7 +15,8 @@
    :stripe_cards :sift_score
    :arn_endpoint :timestamp_created
    :referral_gallons :admin_event_log
-   :subscription_id :referral_code :is_courier])
+   :subscription_id :referral_code :is_courier
+   :type])
 
 (defn process-admin-log
   [log admins]
@@ -193,35 +194,46 @@
 (defn convert-to-courier!
   "Convert a user to a courier. This creates a courier account"
   [db-conn user]
-  (let [{:keys [id]} user]
-    (if (> (:total
-            (first (!select db-conn "orders" ["count(*) as total"]
-                            {:user_id (:id user)})))
-           0)
-      {:success false
-       :message (str "This user already has already made order requests as a "
-                     "customer! A courier can not have any fuel delivery "
-                     "requests. They will need to create another user "
-                     "account with an email address that is different from "
-                     "their customer account.")}
-      (let [new-courier-result (!insert db-conn "couriers"
-                                        {:id id
-                                         :active 1
-                                         :busy 0
-                                         :lat 0
-                                         :lng 0
-                                         :zones ""})
-            set-is-courier-result (!update db-conn "users"
-                                           {:is_courier 1} {:id id})]
-        (cond (and (:success new-courier-result)
-                   (:success set-is-courier-result))
-              {:success true
-               :message "User successfully converted to a courier."}
-              (not (:success set-is-courier-result))
-              {:success false
-               :message "User could not be updated"}
-              (not (:success new-courier-result))
-              {:success false
-               :message "Courier account could not be created"}
-              :else {:success false
-                     :message "Unknown error occured"})))))
+  (let [{:keys [id]} user
+        current-user (first (!select db-conn "users" users-select
+                                     {:id (:id user)}))
+        is-native?  (boolean (= (:type current-user) "native"))]
+    (println (:type current-user))
+    (cond (not is-native?)
+          {:success false
+           :message (str "This user registered with " (:type current-user) ". "
+                         "They must register through the app using an email "
+                         "address in order to be a courier."
+                         )}
+          (> (:total
+              (first (!select db-conn "orders" ["count(*) as total"]
+                              {:user_id (:id user)})))
+             0)
+          {:success false
+           :message (str "This user already has already made order requests as "
+                         "a customer! A courier can not have any fuel delivery "
+                         "requests. They will need to create another user "
+                         "account with an email address that is different from "
+                         "their customer account.")}
+          :else
+          (let [new-courier-result (!insert db-conn "couriers"
+                                            {:id id
+                                             :active 1
+                                             :busy 0
+                                             :lat 0
+                                             :lng 0
+                                             :zones ""})
+                set-is-courier-result (!update db-conn "users"
+                                               {:is_courier 1} {:id id})]
+            (cond (and (:success new-courier-result)
+                       (:success set-is-courier-result))
+                  {:success true
+                   :message "User successfully converted to a courier."}
+                  (not (:success set-is-courier-result))
+                  {:success false
+                   :message "User could not be updated"}
+                  (not (:success new-courier-result))
+                  {:success false
+                   :message "Courier account could not be created"}
+                  :else {:success false
+                         :message "Unknown error occured"})))))
