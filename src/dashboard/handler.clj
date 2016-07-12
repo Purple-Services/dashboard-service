@@ -103,7 +103,8 @@
 ;; a user who can access everything would have the following permissions:
 ;; #{"view-dash","view-couriers","edit-couriers","view-users","edit-users,
 ;;   "send-push","view-coupons","edit-coupons","create-coupons","view-zones",
-;;   "edit-zones", "view-orders","edit-orders","download-stats"}
+;;   "edit-zones", "view-orders","edit-orders","download-stats",
+;;   "convert-to-courier"}
 ;;
 (def dashboard-uri-permissions
   [
