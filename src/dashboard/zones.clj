@@ -50,6 +50,13 @@
                       "Three hour service fee must be in a dollar amount"]
                      [v/in-range [0 5000] :message
                       "Price must be within $0.00 and $50.00"]]
+   :service-fee-300 [[v/required :message
+                      "Five hour service fee can not be blank!"]
+                     [v/number
+                      :message
+                      "Five hour service fee must be in a dollar amount"]
+                     [v/in-range [0 5000] :message
+                      "Price must be within $0.00 and $50.00"]]
    :service-time-bracket-begin [[v/required :message
                                  "Begin time can not be blank!"]
                                 [v/number
@@ -81,7 +88,7 @@
   '{:87 <integer cents> :91 <integer cents>}'.
 
   service-fees is an edn string map of the format
-  '{:60 <integer cents> :180 <integer cents>}'.
+  '{:60 <integer cents> :180 <integer cents> :300 <integer cents>}'.
 
   service-time-bracket is an edn string vector of the format
   '[<service-start> <service-end>]' where <service-start> and <service-end>
@@ -94,19 +101,20 @@
   10:30pm is represened as 1350 which is (+ (* 60 22) 30)"
   [db-conn zone]
   (if (b/valid? zone zone-validations)
-    (let [{:keys [price-87 price-91 service-fee-60 service-fee-180
+    (let [{:keys [price-87 price-91 service-fee-60 service-fee-180 service-fee-300
                   service-time-bracket-begin service-time-bracket-end id]} zone
-                  update-result (!update db-conn "zones"
-                                         {:fuel_prices
-                                          (str {:87 price-87
-                                                :91 price-91})
-                                          :service_fees
-                                          (str {:60 service-fee-60
-                                                :180 service-fee-180})
-                                          :service_time_bracket
-                                          (str [service-time-bracket-begin
-                                                service-time-bracket-end])}
-                                         {:id (:id zone)})]
+          update-result (!update db-conn "zones"
+                                 {:fuel_prices
+                                  (str {:87 price-87
+                                        :91 price-91})
+                                  :service_fees
+                                  (str {:60 service-fee-60
+                                        :180 service-fee-180
+                                        :300 service-fee-300})
+                                  :service_time_bracket
+                                  (str [service-time-bracket-begin
+                                        service-time-bracket-end])}
+                                 {:id (:id zone)})]
       (if (:success update-result)
         (assoc update-result :id id)
         update-result))
