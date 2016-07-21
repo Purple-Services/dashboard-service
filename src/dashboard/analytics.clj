@@ -3,6 +3,7 @@
             [common.db :refer [conn !select !insert !update
                                mysql-escape-str]]
             [common.util :refer [in?]]
+            [dashboard.schedules :refer [schedules-by-courier-id]]
             [clojure.core.matrix :as mat]
             [clojure.java.jdbc :as sql]
             [clojure.string :as s]
@@ -440,142 +441,147 @@
             {:data csv
              :type "csv"}))))
 
-(defn schedule-time-where-statement
-  "Create a where statement from the map
-  {:start datetime :end datetime}"
-  [schedule-time timezone]
-  (let [{:keys [start end]} schedule-time]
-    (get-event-within-time-range "event_log" "complete"
-                                 start
-                                 end
-                                 timezone
-                                 )))
+(defn get-event-within-timestamps
+  "Return a MySQL string for retrieving event in event-log-name that occurs
+  within start-time to end-time. times are unix epoch seconds"
+  [event-log-name event start-time end-time]
+  (str (get-event-time-mysql event-log-name event)
+       " >= "
+       start-time " "
+       "AND "
+       (get-event-time-mysql event-log-name event)
+       " <= "
+       end-time " "))
 
+;; this is where start_time / end_time keys could be replaced with start_time and end_time
 (defn schedule-date-where-statements
-  "Given a vector of scheduled-times hash-map, create a where statement for each
+  "given a vector of scheduled-times hash-map, create a where statement for each
   date.
   schedules-times is a vector of maps of the form
 
-  [{:start datetime
-    :end   datetime},
+  [{:start_time <unix_timestamp>
+    :end_time   <unix_timestamp>},
      ... ]
   "
   [schedule-times timezone]
   (str "(" (apply str (interpose
-                       " OR "
-                       (map #(let [{:keys [start end]} %]
+                       " or "
+                       (map #(let [{:keys [start_time end_time]} %]
                                (str "("
-                                    (get-event-within-time-range "event_log"
+                                    (get-event-within-timestamps "event_log"
                                                                  "complete"
-                                                                 start
-                                                                 end
-                                                                 timezone)
+                                                                 start_time
+                                                                 end_time)
                                     ")"))
                             schedule-times)))
        ")"))
 
 (defn scheduled-orders-of-courier-sql
-  "Return a query for getting the schedule orders of courier-id
+  "return a query for getting the schedule orders of courier-id
   in the date range from-date to-date during scheduled-times. scheduled-times
   is a vector of maps of the form
 
-  [{:start datetime
-    :end   datetime},
+  [{:start_time datetime
+    :end_time   datetime},
      ... ]"
-  [{:keys [courier-id scheduled-times timezone timeframe]}]
-  (let [timeformat (timeframe->timeformat timeframe)]
-    (str  "SELECT (SELECT `users`.`name` AS `name` FROM `users` WHERE "
-          "(`users`.`id` = `orders`.`courier_id`)) AS `name`, "
-          "date_format(convert_tz(from_unixtime("
-          (get-event-time-mysql "`orders`.`event_log`" "complete")
-          "),'UTC','"
-          timezone
-          "'),'"
-          timeformat
-          "') "
-          "AS `date`, "
-          "count(0) AS `count` "
-          "FROM `orders` "
-          "WHERE ((`orders`.`status` = 'complete') "
-          "AND (`orders`.`courier_id` = '" courier-id "')) "
-          "AND "
-          (schedule-date-where-statements scheduled-times timezone)
-          "GROUP BY"
-          " `orders`.`courier_id`,"
-          "date_format(convert_tz(from_unixtime("
-          (get-event-time-mysql "`orders`.`event_log`" "complete")
-          "),'UTC','"
-          timezone
-          "'),'"
-          timeformat
-          "') ORDER BY "
-          "date_format(convert_tz(from_unixtime("
-          (get-event-time-mysql "`orders`.`event_log`" "complete")
-          "),'UTC','"
-          timezone
-          "'),'"
-          timeformat
-          "') asc;"
-          )))
+  [{:keys [courier-id scheduled-times timezone timeformat]}]
+  (str  "select (select `users`.`name` as `name` from `users` where "
+        "(`users`.`id` = `orders`.`courier_id`)) as `name`, "
+        "date_format(convert_tz(from_unixtime("
+        (get-event-time-mysql "`orders`.`event_log`" "complete")
+        "),'utc','"
+        timezone
+        "'),'"
+        timeformat
+        "') "
+        "as `date`, "
+        "count(0) as `count` "
+        "from `orders` "
+        "where ((`orders`.`status` = 'complete') "
+        "and (`orders`.`courier_id` = '" courier-id "')) "
+        "and "
+        (schedule-date-where-statements scheduled-times timezone)
+        "group by"
+        " `orders`.`courier_id`,"
+        "date_format(convert_tz(from_unixtime("
+        (get-event-time-mysql "`orders`.`event_log`" "complete")
+        "),'utc','"
+        timezone
+        "'),'"
+        timeformat
+        "') order by "
+        "date_format(convert_tz(from_unixtime("
+        (get-event-time-mysql "`orders`.`event_log`" "complete")
+        "),'utc','"
+        timezone
+        "'),'"
+        timeformat
+        "') asc;"
+        ))
 
 (defn get-scheduled-orders-of-courier
-  [{:keys [courier-id scheduled-times timezone timeframe db-conn]}]
+  [{:keys [courier-id scheduled-times timezone timeformat db-conn]}]
   (raw-sql-query db-conn [(scheduled-orders-of-courier-sql
                            {:courier-id courier-id
                             :scheduled-times scheduled-times
                             :timezone timezone
-                            :timeframe timeframe})]))
+                            :timeformat timeformat})]))
 
 (defn get-daily-scheduled-orders-per-courier
-  "Get the orders that were completed during schedule for each courier
+  "get the orders that were completed during schedule for each courier
   over the dates from-date to-date in timezone. schedule is a vector of maps
   of the form
-  [{:courier-id \"oKQFyCgkwrn4YNtGlPbF\"
-    :scheduled-times [{:start \"2016-05-01 06:30:00\"
-                       :end \"2016-05-01 18:30:00\"},
+  [{:courier-id \"okqfycgkwrn4yntglpbf\"
+    :scheduled-times [{:start_time <unix_timestamp>
+                       :end_time <unix_timestamp>
                        ...
                       ]},
    ...
   ]
   "
-  [{:keys [schedule timezone db-conn]}]
+  [{:keys [schedule timeformat timezone db-conn]}]
   (map (fn [{:keys [courier-id scheduled-times]}]
          (get-scheduled-orders-of-courier
           {:courier-id courier-id
            :scheduled-times scheduled-times
            :timezone timezone
-           :timeframe "daily"
+           :timeformat timeformat
            :db-conn db-conn
            }))
        schedule))
 
 (defn vector-of-scheduled-orders-count
-  "Create a vector of vectors for the count of orders for each courier made
+  "create a vector of vectors for the count of orders for each courier made
   while scheduled. see 'get-daily-scheduled-orders-per-courier' for more
   information on params"
-  [{:keys [schedule timezone db-conn]}]
+  [{:keys [schedule timeformat timezone db-conn]}]
   (transpose-dates (reduce concat
                            (get-daily-scheduled-orders-per-courier
                             {:schedule schedule
                              :timezone timezone
+                             :timeformat timeformat
                              :db-conn db-conn}))))
 
 (defn scheduled-orders-response
-  "Return a response from db-conn using schedule and timezone that gives the
-  scheduled order count for each courier. The 'schedule order count' for each
+  "return a response from db-conn using schedule and timezone that gives the
+  scheduled order count for each courier. the 'schedule order count' for each
   courier is the amount of completed orders the courier did while scheduled.
   schedule is a vector of maps of the form
 
-  [{:courier-id \"oKQFyCgkwrn4YNtGlPbF\"
-    :scheduled-times [{:start \"2016-05-01 06:30:00\"
-                       :end \"2016-05-01 18:30:00\"},
+  [{:courier-id \"okqfycgkwrn4yntglpbf\"
+    :scheduled-times [{:start_time \"2016-05-01 06:30:00\"
+                       :end_time \"2016-05-01 18:30:00\"},
                        ...
                       ]},
    ...,]
   The data returned is in csv format"
-  [{:keys [schedule timezone db-conn]}]
-  (let [csv (-> (vector-of-scheduled-orders-count {:schedule schedule
+  [{:keys [from-date to-date timezone timeformat db-conn]}]
+  (let [start-time (str from-date " 00:00:00") ;; further tz info is appended in
+        end-time   (str to-date " 23:59:59")   ;; schedules-by-courier-id
+        schedule   (schedules-by-courier-id start-time end-time timezone)
+        csv (-> (vector-of-scheduled-orders-count {:schedule schedule
                                                    :timezone timezone
+                                                   :timeformat timeformat
                                                    :db-conn db-conn})
                 (vec-of-vec-elements->str)
                 (write-csv))]

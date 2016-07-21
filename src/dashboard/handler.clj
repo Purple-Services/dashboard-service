@@ -594,6 +594,17 @@
                        :timeformat (analytics/timeframe->timeformat
                                     timeframe)})
                      response-type))))
+  (POST "/scheduled-orders-per-courier" {body :body}
+        (response (let [b (keywordize-keys body)
+                        {:keys [timeframe timezone response-type
+                                from-date to-date]} b]
+                    (analytics/scheduled-orders-response
+                     {:from-date from-date
+                      :to-date to-date
+                      :timezone timezone
+                      :timeformat (analytics/timeframe->timeformat
+                                   timeframe)
+                      :db-conn (conn)}))))
   ;; gallons count
   (POST "/total-gallons" {body :body}
         (response (let [b (keywordize-keys body)
