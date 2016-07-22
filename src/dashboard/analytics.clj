@@ -7,6 +7,7 @@
             [clojure.core.matrix :as mat]
             [clojure.java.jdbc :as sql]
             [clojure.string :as s]
+            [clojure.set :refer [rename-keys]]
             [clojure.data.csv :as csv]
             [clojure-csv.core :refer [write-csv]]
             [clojure.java.io :as io]
@@ -430,16 +431,18 @@
 
 (defn per-courier-response
   "Return a response from db-conn for sql generated using per-courier-query.
-  response-type is either 'json' or 'csv'."
+  response-type is either 'csv', 'sql-map'."
   [db-conn sql response-type]
-  (let [query-result (raw-sql-query db-conn [sql])]
-    (cond (= response-type "csv")
-          (let [csv (->> query-result
-                         (transpose-dates)
-                         (vec-of-vec-elements->str)
-                         (write-csv))]
-            {:data csv
-             :type "csv"}))))
+  (let [query-result (raw-sql-query db-conn [sql])
+        vec-of-vec-result (->> query-result
+                               (transpose-dates))]
+    (condp = response-type
+      "csv" (let [csv (->> vec-of-vec-result
+                           (vec-of-vec-elements->str)
+                           (write-csv))]
+              {:data csv
+               :type "csv"})
+      "sql-map" query-result)))
 
 (defn get-event-within-timestamps
   "Return a MySQL string for retrieving event in event-log-name that occurs
@@ -501,18 +504,18 @@
         "and (`orders`.`courier_id` = '" courier-id "')) "
         "and "
         (schedule-date-where-statements scheduled-times timezone)
-        "group by"
+        "GROUP BY"
         " `orders`.`courier_id`,"
         "date_format(convert_tz(from_unixtime("
         (get-event-time-mysql "`orders`.`event_log`" "complete")
-        "),'utc','"
+        "),'UTC','"
         timezone
         "'),'"
         timeformat
-        "') order by "
+        "') ORDER BY "
         "date_format(convert_tz(from_unixtime("
         (get-event-time-mysql "`orders`.`event_log`" "complete")
-        "),'utc','"
+        "),'UTC','"
         timezone
         "'),'"
         timeformat
@@ -546,21 +549,8 @@
            :scheduled-times scheduled-times
            :timezone timezone
            :timeformat timeformat
-           :db-conn db-conn
-           }))
+           :db-conn db-conn}))
        schedule))
-
-(defn vector-of-scheduled-orders-count
-  "create a vector of vectors for the count of orders for each courier made
-  while scheduled. see 'get-daily-scheduled-orders-per-courier' for more
-  information on params"
-  [{:keys [schedule timeformat timezone db-conn]}]
-  (transpose-dates (reduce concat
-                           (get-daily-scheduled-orders-per-courier
-                            {:schedule schedule
-                             :timezone timezone
-                             :timeformat timeformat
-                             :db-conn db-conn}))))
 
 (defn scheduled-orders-response
   "return a response from db-conn using schedule and timezone that gives the
@@ -574,16 +564,77 @@
                        ...
                       ]},
    ...,]
-  The data returned is in csv format"
-  [{:keys [from-date to-date timezone timeformat db-conn]}]
+  reponse-type is a string, either \"csv\" or \"sql-map\" "
+  [{:keys [from-date to-date timezone timeformat db-conn response-type]
+    :or {:response-type "csv"}}]
   (let [start-time (str from-date " 00:00:00") ;; further tz info is appended in
         end-time   (str to-date " 23:59:59")   ;; schedules-by-courier-id
         schedule   (schedules-by-courier-id start-time end-time timezone)
-        csv (-> (vector-of-scheduled-orders-count {:schedule schedule
-                                                   :timezone timezone
-                                                   :timeformat timeformat
-                                                   :db-conn db-conn})
-                (vec-of-vec-elements->str)
-                (write-csv))]
-    {:data csv
-     :type csv}))
+        total-orders (per-courier-response
+                      db-conn
+                      (per-courier-query
+                       {:select-statement "count(0) AS `count`"
+                        :from-date from-date
+                        :to-date to-date
+                        :timezone timezone
+                        :timeformat timeformat})
+                      "sql-map")
+        scheduled-orders-count (flatten
+                                (get-daily-scheduled-orders-per-courier
+                                 {:schedule schedule
+                                  :timezone timezone
+                                  :timeformat timeformat
+                                  :db-conn db-conn}))
+        renamed-total (map #(rename-keys % {:count :total}) total-orders)
+        renamed-scheduled (map #(rename-keys % {:count :scheduled})
+                               scheduled-orders-count)
+        joined-sets (map (fn [item]
+                           (let [scheduled-map (first
+                                                (filter #(and (= (:name item)
+                                                                 (:name %))
+                                                              (= (:date item)
+                                                                 (:date %)))
+                                                        renamed-scheduled))]
+                             (if scheduled-map
+                               (merge item {:scheduled
+                                            (:scheduled scheduled-map)})
+                               (merge item {:scheduled 0}))))
+                         renamed-total)
+        scheduled-counts (map #(rename-keys % {:scheduled :count}) joined-sets)]
+    (condp = response-type
+      "csv" {:data (->> (transpose-dates (sort-by :date
+                                                  scheduled-counts))
+                        (vec-of-vec-elements->str)
+                        (write-csv))
+             :type "csv"}
+      ;; note: This will return sets of the format:
+      ;; ({:name <name>
+      ;;  :date <date>
+      ;;  :total <total_orders>
+      ;;  :scheduled <scheduled_orders>
+      ;;  }, ...)
+      "sql-map" joined-sets)))
+
+(defn flex-orders-response
+  "Similar to scheduled-orders-response, expect returns flex-orders-response."
+  [{:keys [from-date to-date timezone timeformat db-conn response-type]
+    :or {:response-type "csv"}}]
+  (let [start-time from-date
+        end-time   to-date
+        scheduled-sql-maps  (doall (scheduled-orders-response
+                                    {:from-date start-time
+                                     :to-date end-time
+                                     :timezone timezone
+                                     :timeformat timeformat
+                                     :db-conn db-conn
+                                     :response-type "sql-map"}))
+        flex-sql-maps (map #(merge % {:flex (- (:total %) (:scheduled %))})
+                           scheduled-sql-maps)
+        flex-counts (map #(rename-keys % {:flex :count}) flex-sql-maps)]
+    (condp = response-type
+      "csv"
+      {:data (->> (transpose-dates (sort-by :date flex-counts))
+                  (vec-of-vec-elements->str)
+                  (write-csv))
+       :type "csv"}
+      "sql-map" scheduled-sql-maps)))

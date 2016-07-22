@@ -604,7 +604,20 @@
                       :timezone timezone
                       :timeformat (analytics/timeframe->timeformat
                                    timeframe)
-                      :db-conn (conn)}))))
+                      :db-conn (conn)
+                      :response-type "csv"}))))
+  (POST "/flex-orders-per-courier" {body :body}
+        (response (let [b (keywordize-keys body)
+                        {:keys [timeframe timezone response-type
+                                from-date to-date]} b]
+                    (analytics/flex-orders-response
+                     {:from-date from-date
+                      :to-date to-date
+                      :timezone timezone
+                      :timeformat (analytics/timeframe->timeformat
+                                   timeframe)
+                      :db-conn (conn)
+                      :response-type "csv"}))))
   ;; gallons count
   (POST "/total-gallons" {body :body}
         (response (let [b (keywordize-keys body)
