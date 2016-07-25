@@ -25,8 +25,9 @@
 
 ;; 	a. The courier did not clock in until later. All orders before this 
 ;;         time would be considered'flex'
-
 ;; 	b. The courier never clocked in, all orders would be considered flex.
+;;      c. The courier clocked out late. The orders done past the shift time
+;;         would be considered flex.
 
 ;; 2. Timezones should be respected when retrieving shifts with 'list-shifts'.
 
@@ -69,6 +70,11 @@
   (wiw-req "get" "shifts" :query-params {"start" start
                                          "end" end}))
 
+(defn list-times
+  [start end]
+  (wiw-req "get" "times" :query-params {"start" start
+                                        "end" end}))
+
 (defn list-users
   "List all users"
   []
@@ -106,15 +112,21 @@
      :end_time <date>},
   ...
   }
-  dates are strings of the format 'YYYY-MM-DD HH:MM:SS"
+  dates are strings of the format 'YYYY-MM-DD HH:MM:SS Z"
   [start end]
   (let [id-map (purple-id-wiw-id-map)
+        ;; shift-times (->> (list-times start end)
+        ;;                  :resp
+        ;;                  :times
+        ;;                  (filter #(not (nil? (:end_time %)))))
         shifts (map #(hash-map :start_time (quot (c/to-long (:start_time %))
                                                  1000)
                                :end_time (quot (c/to-long (:end_time %))
                                                1000)
                                :user_id (:user_id %))
-                    (get-in (list-shifts start end) [:resp :shifts]))]
+                    (get-in (list-shifts start end) [:resp :shifts])
+                    ;;shift-times
+                    )]
     (join id-map shifts)))
 
 (defn process-schedules-by-courier-id
