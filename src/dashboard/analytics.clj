@@ -287,7 +287,9 @@
 (defn get-event-time-mysql
   "return a MySQL string for retrieving an event time from an order "
   [event-log-name event]
-  (str "substr(" event-log-name ",locate('" event "'," event-log-name ") + 9,10)"))
+  (str "substr(" event-log-name ",locate('" event "'," event-log-name ") + "
+       (+ (count event) 1)
+       ",10)"))
 
 ;; timezone is a string and defaults to 'America/Los_Angeles' and depends on
 ;; proper setup of the timezones table in mySQL.
@@ -326,11 +328,14 @@
   "Return a MySQL string for retrieving totals of select-statement for
   completed orders in the range from-date to to-date using timezone.
   timeformat can be generated from timeframe->timeformat"
-  [{:keys [select-statement from-date to-date timezone timeformat where-clause]}]
+  [{:keys [select-statement from-date to-date timezone timeformat where-clause
+           order-status]
+    :or {order-status "complete"}
+    }]
   (let [from-date (str from-date " 00:00:00")
         to-date   (str to-date " 23:59:59")]
     (str "select date_format(convert_tz(from_unixtime("
-         (get-event-time-mysql "event_log" "complete")
+         (get-event-time-mysql "event_log" order-status)
          "),'UTC','"
          timezone
          "'),'"
@@ -339,11 +344,12 @@
          ","
          select-statement
          " from orders where"
-         " status = 'complete' AND  "
-         (get-event-time-mysql "event_log" "complete")
+         " status = '" order-status "' AND  "
+         (get-event-time-mysql "event_log" order-status)
          " > 1420070400 "
          "AND "
-         (get-event-within-time-range "event_log" "complete"
+         (get-event-within-time-range "event_log"
+                                      order-status
                                       from-date
                                       to-date
                                       timezone)
@@ -351,7 +357,7 @@
            (str where-clause " "))
          "GROUP BY "
          "date_format(convert_tz(from_unixtime("
-         (get-event-time-mysql "event_log" "complete")
+         (get-event-time-mysql "event_log" order-status)
          "),'UTC','"
          timezone "'),'" timeformat
          "');")))
@@ -360,13 +366,15 @@
   "Return a MySQL string for retrieving per-courier for select-statement for
   completed orders in the range from-date to to-date using timezone.
   timeformat can be generated from timeframe->timeformat"
-  [{:keys [select-statement from-date to-date timezone timeformat where-clause]}]
+  [{:keys [select-statement from-date to-date timezone timeformat where-clause
+           order-status]
+    :or {order-status "complete"}}]
   (let [from-date (str from-date " 00:00:00")
         to-date   (str to-date " 23:59:59")]
     (str "SELECT (SELECT `users`.`name` AS `name` FROM `users` WHERE "
          "(`users`.`id` = `orders`.`courier_id`)) AS `name`, "
          "date_format(convert_tz(from_unixtime("
-         (get-event-time-mysql "`orders`.`event_log`" "complete")
+         (get-event-time-mysql "`orders`.`event_log`" order-status)
          "),'UTC','"
          timezone
          "'),'"
@@ -375,13 +383,13 @@
          "AS `date`, "
          select-statement " "
          "FROM `orders` "
-         "WHERE ((`orders`.`status` = 'complete') "
+         "WHERE ((`orders`.`status` = '" order-status "') "
          "AND (`orders`.`courier_id` <> '6nJd1SMjMnxxhUsKp3Nk')) "
          "AND "
-         (get-event-time-mysql "event_log" "complete")
+         (get-event-time-mysql "event_log" order-status)
          " > 1420070400 "
          "AND "
-         (get-event-within-time-range "event_log" "complete"
+         (get-event-within-time-range "event_log" order-status
                                       from-date
                                       to-date)
          (when where-clause
@@ -389,14 +397,14 @@
          "GROUP BY"
          " `orders`.`courier_id`,"
          "date_format(convert_tz(from_unixtime("
-         (get-event-time-mysql "`orders`.`event_log`" "complete")
+         (get-event-time-mysql "`orders`.`event_log`" order-status)
          "),'UTC','"
          timezone
          "'),'"
          timeformat
          "') ORDER BY "
          "date_format(convert_tz(from_unixtime("
-         (get-event-time-mysql "`orders`.`event_log`" "complete")
+         (get-event-time-mysql "`orders`.`event_log`" order-status)
          "),'UTC','"
          timezone
          "'),'"

@@ -580,6 +580,40 @@
                        :timeformat (analytics/timeframe->timeformat
                                     timeframe)})
                      response-type))))
+  (POST "/total-cancelled-orders" {body :body}
+        (response (let [b (keywordize-keys body)
+                        {:keys [timezone timeframe response-type from-date
+                                to-date]} b]
+                    (analytics/total-for-select-response
+                     (conn)
+                     (analytics/totals-query
+                      {:select-statement
+                       "COUNT(DISTINCT id) as `orders`"
+                       :from-date from-date
+                       :to-date to-date
+                       :order-status "cancelled"
+                       :timezone timezone
+                       :timeformat (analytics/timeframe->timeformat
+                                    timeframe)})
+                     response-type))))
+  (POST "/cancelled-unassigned-orders" {body :body}
+        (response (let [b (keywordize-keys body)
+                        {:keys [timezone timeframe response-type from-date
+                                to-date]} b]
+                    (analytics/total-for-select-response
+                     (conn)
+                     (analytics/totals-query
+                      {:select-statement
+                       "COUNT(DISTINCT id) as `orders`"
+                       :where-clause "AND `orders`.`courier_id` = ''"
+                       :from-date from-date
+                       :to-date to-date
+                       :order-status "cancelled"
+                       :timezone timezone
+                       :timeformat (analytics/timeframe->timeformat
+                                    timeframe)})
+                     response-type))))
+  ;; per courier orders
   (POST "/orders-per-courier" {body :body}
         (response (let [b (keywordize-keys body)
                         {:keys [timeframe timezone response-type
@@ -593,6 +627,23 @@
                        :timezone timezone
                        :timeformat (analytics/timeframe->timeformat
                                     timeframe)})
+                     response-type))))
+  (POST "/cancelled-orders-per-courier" {body :body}
+        (response (let [b (keywordize-keys body)
+                        {:keys [timeframe timezone response-type
+                                from-date to-date]} b]
+                    (analytics/per-courier-response
+                     (conn)
+                     (analytics/per-courier-query
+                      {:select-statement "count(0) AS `count`"
+                       :from-date from-date
+                       :to-date to-date
+                       :order-status "cancelled"
+                       :where-clause "AND `orders`.`courier_id` != ''"
+                       :timezone timezone
+                       :timeformat (analytics/timeframe->timeformat
+                                    timeframe)
+                       })
                      response-type))))
   (POST "/scheduled-orders-per-courier" {body :body}
         (response (let [b (keywordize-keys body)
@@ -618,7 +669,7 @@
                                    timeframe)
                       :db-conn (conn)
                       :response-type "csv"}))))
-  ;; gallons count
+  ;; total gallons count
   (POST "/total-gallons" {body :body}
         (response (let [b (keywordize-keys body)
                         {:keys [timezone timeframe response-type from-date
@@ -633,6 +684,37 @@
                        :timeformat (analytics/timeframe->timeformat
                                     timeframe)})
                      response-type))))
+  (POST "/total-87-gallons" {body :body}
+        (response (let [b (keywordize-keys body)
+                        {:keys [timezone timeframe response-type from-date
+                                to-date]} b]
+                    (analytics/total-for-select-response
+                     (conn)
+                     (analytics/totals-query
+                      {:select-statement "SUM(`gallons`) as `gallons`"
+                       :from-date from-date
+                       :to-date to-date
+                       :timezone timezone
+                       :where-clause "AND `gas_type` = '87'"
+                       :timeformat (analytics/timeframe->timeformat
+                                    timeframe)})
+                     response-type))))
+  (POST "/total-91-gallons" {body :body}
+        (response (let [b (keywordize-keys body)
+                        {:keys [timezone timeframe response-type from-date
+                                to-date]} b]
+                    (analytics/total-for-select-response
+                     (conn)
+                     (analytics/totals-query
+                      {:select-statement "SUM(`gallons`) as `gallons`"
+                       :from-date from-date
+                       :to-date to-date
+                       :timezone timezone
+                       :where-clause "AND `gas_type` = '91'"
+                       :timeformat (analytics/timeframe->timeformat
+                                    timeframe)})
+                     response-type))))
+  ;; per courier gallons count
   (POST "/gallons-per-courier" {body :body}
         (response (let [b (keywordize-keys body)
                         {:keys [timeframe timezone response-type
@@ -644,6 +726,36 @@
                        :from-date from-date
                        :to-date to-date
                        :timezone timezone
+                       :timeformat (analytics/timeframe->timeformat
+                                    timeframe)})
+                     response-type))))
+  (POST "/gallons-87-per-courier" {body :body}
+        (response (let [b (keywordize-keys body)
+                        {:keys [timeframe timezone response-type
+                                from-date to-date]} b]
+                    (analytics/per-courier-response
+                     (conn)
+                     (analytics/per-courier-query
+                      {:select-statement "SUM(`gallons`) AS `count`"
+                       :from-date from-date
+                       :to-date to-date
+                       :timezone timezone
+                       :where-clause "AND `gas_type` = '87'"
+                       :timeformat (analytics/timeframe->timeformat
+                                    timeframe)})
+                     response-type))))
+  (POST "/gallons-91-per-courier" {body :body}
+        (response (let [b (keywordize-keys body)
+                        {:keys [timeframe timezone response-type
+                                from-date to-date]} b]
+                    (analytics/per-courier-response
+                     (conn)
+                     (analytics/per-courier-query
+                      {:select-statement "SUM(`gallons`) AS `count`"
+                       :from-date from-date
+                       :to-date to-date
+                       :timezone timezone
+                       :where-clause "AND `gas_type` = '91'"
                        :timeformat (analytics/timeframe->timeformat
                                     timeframe)})
                      response-type))))
