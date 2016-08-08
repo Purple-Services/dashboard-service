@@ -16,7 +16,7 @@
                  [ring/ring-jetty-adapter "1.4.0"]
                  [ring/ring-json "0.4.0"]
                  [ring/ring-ssl "0.2.1"]
-                 [common "1.1.1-SNAPSHOT"]
+                 [common "1.1.2-SNAPSHOT"]
                  [ring-cors "0.1.7"]
                  [opt "1.0.2-SNAPSHOT"]]
   :plugins [[lein-ring "0.9.7"]
