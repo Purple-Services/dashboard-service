@@ -224,6 +224,9 @@
    {:uri "/orders-per-day"
     :method "POST"
     :permissions ["download-stats"]}
+   {:uri "/fleets-invoice"
+    :method "POST"
+    :permissions ["download-stats"]}
    ;;!! Marketing
    {:uri "/send-push-to-table-view"
     :method "POST"
@@ -891,6 +894,15 @@
                                     timeframe)
                        :where-clause "AND `user_id` NOT IN ('evU83hVPIbccvZE0C2uL','nszMr7cDRfRrbTksXaEC','k4KTi1xmes8LLd9ZZhsH')"})
                      response-type))))
+  ;;!! B2B reports
+  (POST "/fleets-invoice" {body :body}
+        (response (let [b (keywordize-keys body)
+                        {:keys [timezone from-date to-date]} b]
+                    (analytics/fleets-invoice
+                     {:from-date from-date
+                      :to-date to-date
+                      :timezone timezone
+                      :db-conn (conn)}))))
   ;; Monthly subscriptions
   ;;!! Marketing
   (POST "/send-push-to-table-view" {body :body}

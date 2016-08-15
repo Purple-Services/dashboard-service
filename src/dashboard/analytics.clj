@@ -3,15 +3,17 @@
             [common.db :refer [conn !select !insert !update
                                mysql-escape-str]]
             [common.util :refer [in?]]
+            [common.vin :refer [get-info-batch]]
             [dashboard.schedules :refer [schedules-by-courier-id]]
             [clojure.core.matrix :as mat]
             [clojure.java.jdbc :as sql]
             [clojure.string :as s]
-            [clojure.set :refer [rename-keys]]
+            [clojure.set :refer [rename-keys join]]
             [clojure.data.csv :as csv]
             [clojure-csv.core :refer [write-csv]]
             [clojure.java.io :as io]
             [clojure.core.memoize :refer [memo memo-clear!]]
+            [clojure.algo.generic.functor :refer [fmap]]
             [clj-time.core :as time]
             [clj-time.periodic :as periodic]
             [clj-time.coerce :as time-coerce]
@@ -646,3 +648,91 @@
                   (write-csv))
        :type "csv"}
       "sql-map" scheduled-sql-maps)))
+
+(defn fleet-invoice-query
+  "Return a MySQL string for retrieving fleet delieviers orders in the range
+  from-date to to-date using timezone."
+  [{:keys [from-date to-date timezone]}]
+  (let [from-date (str from-date " 00:00:00")
+        to-date (str to-date " 23:59:59")]
+    (str "SELECT fleet_accounts.name as `account-name`, "
+         "fleet_accounts.id as `account-id`, "
+         "fleet_deliveries.id as `delivery-id`, "
+         "date_format(convert_tz(fleet_deliveries.timestamp_created,'UTC',"
+         "'" timezone "'"
+         "),'%Y-%m-%d %H:%i:%S') as `timestamp`, "
+         "fleet_deliveries.vin as `vin`, "
+         "fleet_deliveries.license_plate as `plate-or-stock-no`, "
+         "fleet_deliveries.gallons as `gallons`, "
+         "FORMAT(fleet_deliveries.gas_price / 100, 2) as `gas-price`, "
+         "FORMAT((fleet_deliveries.gas_price / 100) * fleet_deliveries.gallons, 2) as `total-price`, "
+         "fleet_deliveries.gas_type as `Octane`, if(fleet_deliveries.is_top_tier, 'yes', 'no') as `top-tier?` "
+         "FROM `fleet_deliveries` "
+         "LEFT JOIN fleet_accounts ON fleet_deliveries.account_id = fleet_accounts.id "
+         "LEFT JOIN users ON fleet_deliveries.courier_id = users.id "
+         "WHERE fleet_deliveries.timestamp_created >= "
+         "convert_tz('" from-date "','" timezone "','UTC') "
+         "AND fleet_deliveries.timestamp_created <= "
+         "convert_tz('" to-date "','" timezone "','UTC') "
+         "ORDER BY fleet_accounts.name ASC, fleet_deliveries.timestamp_created ASC;"
+         )))
+
+(defn fleets-invoice
+  [{:keys [from-date to-date timezone db-conn]}]
+  (let [from-date (str from-date " 00:00:00")
+        to-date (str to-date " 23:59:59")
+        fleet-result (raw-sql-query
+                      db-conn
+                      [(fleet-invoice-query {:from-date from-date
+                                             :to-date to-date
+                                             :timezone timezone})])
+        vins (into [] (distinct (map :vin fleet-result)))
+        get-info-batch-result (get-info-batch vins)]
+    ;; make sure there wasn't an error retrieving vins
+    (if (:success get-info-batch-result)
+      ;; generate reports
+      (let [vins-info (:resp get-info-batch-result)
+            fleet-result-vins-info (join vins-info fleet-result)
+            grouped-set            (group-by :account-name
+                                             fleet-result-vins-info)
+            report-vecs (fn [fleet-account-deliveries]
+                          (cons
+                           ["Timestamp"
+                            "Make"
+                            "Model"
+                            "Year"
+                            "VIN"
+                            "Plate or Stock Number"
+                            "Octane"
+                            "Top Tier?"
+                            "Gallons"
+                            "Gallon Price"
+                            "Total Price"]
+                           (map #(vector (:timestamp %)
+                                         (:make %)
+                                         (:model %)
+                                         (:year %)
+                                         (:vin %)
+                                         (:plate-or-stock-no %)
+                                         (:octane %)
+                                         (:top-tier? %)
+                                         (:gallons %)
+                                         (:gas-price %)
+                                         (:total-price %))
+                                (sort-by :timestamp fleet-account-deliveries))))
+            report-csv (fn [fleet-account-deliveries]
+                         (write-csv (vec-of-vec-elements->str
+                                     (report-vecs fleet-account-deliveries))))
+            account-name-report-csv-map (fmap report-csv grouped-set)
+            account-name-report-csv-strings (map
+                                             #(str (first %) "\n"
+                                                   (second %))
+                                             (into '()
+                                                   account-name-report-csv-map))
+            account-name-report-csv (s/join "\n"
+                                            account-name-report-csv-strings)]
+        {:data account-name-report-csv
+         :success true})
+      ;; error
+      {:data "Error"
+       :success false})))
