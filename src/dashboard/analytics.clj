@@ -697,7 +697,8 @@
                                              fleet-result-vins-info)
             report-vecs (fn [fleet-account-deliveries]
                           (cons
-                           ["Timestamp"
+                           [(str "Timestamp (" timezone ")")
+                            "Order ID"
                             "Make"
                             "Model"
                             "Year"
@@ -709,6 +710,7 @@
                             "Gallon Price"
                             "Total Price"]
                            (map #(vector (:timestamp %)
+                                         (:delivery-id %)
                                          (:make %)
                                          (:model %)
                                          (:year %)
@@ -736,3 +738,98 @@
       ;; error
       {:data "Error"
        :success false})))
+
+(defn managed-accounts-invoice-query
+  "Return a MySQL string for retrieving orders that are associated with
+  account manager accounts in the range from-date to to-date using timezone."
+  [{:keys [from-date to-date timezone]}]
+  (str "SELECT account_managers.email AS `manager-email`, "
+       "account_managers.id AS `manager-id`, "
+       "users.email AS `user-email`, "
+       "users.name AS `user-name`, "
+       "orders.id AS `delivery-id`, "
+       "date_format(convert_tz(from_unixtime("
+       (get-event-time-mysql "`orders`.`event_log`" "complete")
+       "),'UTC',"
+       "'" timezone "'"
+       "),'%Y-%m-%d %H:%i:%S') AS `timestamp`, "
+       "vehicles.make AS `make`, "
+       "vehicles.model AS `model`, "
+       "vehicles.year AS `year`, "
+       "vehicles.license_plate AS `license-plate`, "
+       "orders.license_plate AS `plate-or-stock-no`, "
+       "orders.gallons AS `gallons`, "
+       "orders.gallons - orders.referral_gallons_used AS `gallons-charged`, "
+       "FORMAT(orders.gas_price / 100, 2) AS `gas-price`, "
+       "FORMAT(orders.service_fee / 100, 2) AS `service-fee`, "
+       "FORMAT(orders.total_price / 100, 2) AS `total-price`, "
+       "orders.gas_type AS `Octane`, "
+       "IF(orders.is_top_tier, 'yes', 'no') AS `top-tier?` "
+       "FROM `orders` "
+       "JOIN users ON users.id = orders.user_id "
+       "JOIN account_managers ON account_managers.id = users.account_manager_id "
+       "JOIN vehicles ON vehicles.id = orders.vehicle_id "
+       "AND " (get-event-within-time-range "orders.event_log"
+                                           "complete"
+                                           from-date
+                                           to-date
+                                           timezone)
+       "WHERE orders.status = 'complete' "
+       "ORDER BY account_managers.email ASC, orders.timestamp_created ASC;"
+       ))
+
+(defn managed-accounts-invoice
+  [{:keys [from-date to-date timezone db-conn]}]
+  (let [from-date (str from-date " 00:00:00")
+        to-date (str to-date " 23:59:59")
+        managed-accounts-result
+        (raw-sql-query
+         db-conn
+         [(managed-accounts-invoice-query
+           {:from-date from-date
+            :to-date to-date
+            :timezone timezone})])]
+    (let [grouped-set (group-by :manager-email
+                                managed-accounts-result)
+          report-vecs (fn [managed-account-orders]
+                        (cons
+                         [(str "Timestamp (" timezone ")")
+                          "Order ID"
+                          "Name"
+                          "Email"
+                          "Make"
+                          "Model"
+                          "Year"
+                          "Plate Number"
+                          "Octane"
+                          "Top Tier?"
+                          "Gallons"
+                          "Gallon Price"
+                          "Total Price"]
+                         (map #(vector (:timestamp %)
+                                       (:delivery-id %)
+                                       (:user-name %)
+                                       (:user-email %)
+                                       (:make %)
+                                       (:model %)
+                                       (:year %)
+                                       (:license-plate %)
+                                       (:octane %)
+                                       (:top-tier? %)
+                                       (:gallons %)
+                                       (:gas-price %)
+                                       (:total-price %))
+                              (sort-by :manager-email managed-account-orders))))
+          report-csv (fn [managed-account-orders]
+                       (write-csv (vec-of-vec-elements->str
+                                   (report-vecs managed-account-orders))))
+          account-name-report-csv-map (fmap report-csv grouped-set)
+          account-name-report-csv-strings (map
+                                           #(str (first %) "\n"
+                                                 (second %))
+                                           (into '()
+                                                 account-name-report-csv-map))
+          account-name-report-csv (s/join "\n"
+                                          account-name-report-csv-strings)]
+      {:data account-name-report-csv
+       :success true})))

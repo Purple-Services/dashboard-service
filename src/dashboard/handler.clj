@@ -227,6 +227,9 @@
    {:uri "/fleets-invoice"
     :method "POST"
     :permissions ["download-stats"]}
+   {:uri "/managed-accounts-invoice"
+    :method "POST"
+    :permissions ["download-stats"]}
    ;;!! Marketing
    {:uri "/send-push-to-table-view"
     :method "POST"
@@ -899,6 +902,14 @@
         (response (let [b (keywordize-keys body)
                         {:keys [timezone from-date to-date]} b]
                     (analytics/fleets-invoice
+                     {:from-date from-date
+                      :to-date to-date
+                      :timezone timezone
+                      :db-conn (conn)}))))
+  (POST "/managed-accounts-invoice" {body :body}
+        (response (let [b (keywordize-keys body)
+                        {:keys [timezone from-date to-date]} b]
+                    (analytics/managed-accounts-invoice
                      {:from-date from-date
                       :to-date to-date
                       :timezone timezone
