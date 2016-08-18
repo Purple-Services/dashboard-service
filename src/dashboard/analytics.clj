@@ -23,6 +23,15 @@
 
 (def ymd-formatter (time-format/formatter "yyyy-MM-dd"))
 
+(def timezone-prettifier
+  {:America/Los_Angeles "Pacific"})
+
+(defn timezone->pretified
+  [timezone]
+  (if-let [prettified ((keyword timezone) timezone-prettifier)]
+    prettified
+    timezone))
+
 (defn joda->ymd
   "Convert Joda Timestamp object to formatted date string."
   [x]
@@ -721,7 +730,8 @@
                                              fleet-result-vins-info)
             report-vecs (fn [fleet-account-deliveries]
                           (cons
-                           [(str "Timestamp (" timezone ")")
+                           [(str "Timestamp ("
+                                 (timezone->pretified timezone) ")")
                             "Order ID"
                             "Make"
                             "Model"
@@ -819,7 +829,7 @@
                                 managed-accounts-result)
           report-vecs (fn [managed-account-orders]
                         (cons
-                         [(str "Timestamp (" timezone ")")
+                         [(str "Timestamp (" (timezone->pretified timezone) ")")
                           "Order ID"
                           "Name"
                           "Email"
