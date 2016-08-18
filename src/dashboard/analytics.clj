@@ -364,6 +364,30 @@
          timezone "'),'" timeformat
          "');")))
 
+(defn totals-query-fleet-deliveries
+  "Return a MySQL string for retrieving totals of select-statement fleet
+  deliveries in the range from-date to to-date using timezone.
+  timeformat can be generated from timeframe->timeformat"
+  [{:keys [select-statement from-date to-date
+           timezone timeformat where-clause]}]
+  (let [from-date (str from-date " 00:00:00")
+        to-date   (str to-date " 23:59:59")]
+    (str "SELECT "
+         "date_format(convert_tz(fleet_deliveries.timestamp_created,'UTC',"
+         "'" timezone "'),'" timeformat "') AS 'date', "
+         select-statement " "
+         "FROM fleet_deliveries "
+         "WHERE "
+         "fleet_deliveries.timestamp_created >= "
+         "convert_tz('" from-date "','" timezone "','UTC') "
+         "AND fleet_deliveries.timestamp_created <= "
+         "convert_tz('" to-date "','" timezone "','UTC') "
+         (when where-clause
+           (str where-clause " "))
+         "GROUP BY "
+         "date_format(convert_tz(fleet_deliveries.timestamp_created,'UTC',"
+         "'" timezone "'),'" timeformat "');")))
+
 (defn per-courier-query
   "Return a MySQL string for retrieving per-courier for select-statement for
   completed orders in the range from-date to to-date using timezone.
@@ -777,7 +801,7 @@
        "WHERE orders.status = 'complete' "
        "ORDER BY account_managers.email ASC, orders.timestamp_created ASC;"
        ))
-
+;; add service-fee and tire pressure check (yes/no)
 (defn managed-accounts-invoice
   [{:keys [from-date to-date timezone db-conn]}]
   (let [from-date (str from-date " 00:00:00")
