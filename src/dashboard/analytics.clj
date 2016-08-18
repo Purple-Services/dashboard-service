@@ -788,7 +788,8 @@
        "FORMAT(orders.service_fee / 100, 2) AS `service-fee`, "
        "FORMAT(orders.total_price / 100, 2) AS `total-price`, "
        "orders.gas_type AS `Octane`, "
-       "IF(orders.is_top_tier, 'yes', 'no') AS `top-tier?` "
+       "IF(orders.is_top_tier, 'yes', 'no') AS `top-tier?`, "
+       "IF(orders.tire_pressure_check, 'yes', 'no') AS `tire-pressure-check?` "
        "FROM `orders` "
        "JOIN users ON users.id = orders.user_id "
        "JOIN account_managers ON account_managers.id = users.account_manager_id "
@@ -801,6 +802,7 @@
        "WHERE orders.status = 'complete' "
        "ORDER BY account_managers.email ASC, orders.timestamp_created ASC;"
        ))
+
 ;; add service-fee and tire pressure check (yes/no)
 (defn managed-accounts-invoice
   [{:keys [from-date to-date timezone db-conn]}]
@@ -827,8 +829,10 @@
                           "Plate Number"
                           "Octane"
                           "Top Tier?"
+                          "Tire Pressure Check?"
                           "Gallons"
                           "Gallon Price"
+                          "Service Fee"
                           "Total Price"]
                          (map #(vector (:timestamp %)
                                        (:delivery-id %)
@@ -840,8 +844,10 @@
                                        (:license-plate %)
                                        (:octane %)
                                        (:top-tier? %)
+                                       (:tire-pressure-check? %)
                                        (:gallons %)
                                        (:gas-price %)
+                                       (:service-fee %)
                                        (:total-price %))
                               (sort-by :manager-email managed-account-orders))))
           report-csv (fn [managed-account-orders]
