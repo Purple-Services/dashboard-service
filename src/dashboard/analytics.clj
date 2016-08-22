@@ -26,7 +26,7 @@
 (def timezone-prettifier
   {:America/Los_Angeles "Pacific"})
 
-(defn timezone->pretified
+(defn timezone->prettifier
   [timezone]
   (if-let [prettified ((keyword timezone) timezone-prettifier)]
     prettified
@@ -446,6 +446,34 @@
          timeformat
          "') asc;")))
 
+(defn per-courier-query-fleet-deliveries
+  "Return a MySQL string for retrieving per-courier for select-statement for
+  fleet-deliveries in the range from-date to to-date using timezone.
+  timeformat can be generated from timeframe->timeformat"
+  [{:keys [select-statement from-date to-date
+           timezone timeformat where-clause]}]
+  (let [from-date (str from-date " 00:00:00")
+        to-date   (str to-date " 23:59:59")]
+    (str "SELECT (SELECT `users`.`name` AS `name` FROM `users` WHERE "
+         "(`users`.`id` = `fleet_deliveries`.`courier_id`)) AS `name`, "
+         "date_format(convert_tz(fleet_deliveries.timestamp_created,'UTC',"
+         "'" timezone "'),'" timeformat "') AS 'date', "
+         select-statement " "
+         "FROM `fleet_deliveries` "
+         "WHERE "
+         "fleet_deliveries.timestamp_created >= "
+         "convert_tz('" from-date "','" timezone "','UTC') "
+         "AND fleet_deliveries.timestamp_created <= "
+         "convert_tz('" to-date "','" timezone "','UTC') "
+         (when where-clause
+           (str where-clause " "))
+         "GROUP BY "
+         "date_format(convert_tz(fleet_deliveries.timestamp_created,'UTC',"
+         "'" timezone "'),'" timeformat "') "
+         "ORDER BY "
+         "date_format(convert_tz(fleet_deliveries.timestamp_created,'UTC',"
+         "'" timezone "'),'" timeformat "') asc;")))
+
 (defn total-for-select-response
   "Provide a response from db-conn for sql generated using totals-query.
   response-type is  either 'json' or 'csv'."
@@ -731,7 +759,7 @@
             report-vecs (fn [fleet-account-deliveries]
                           (cons
                            [(str "Timestamp ("
-                                 (timezone->pretified timezone) ")")
+                                 (timezone->prettifier timezone) ")")
                             "Order ID"
                             "Make"
                             "Model"
@@ -829,7 +857,7 @@
                                 managed-accounts-result)
           report-vecs (fn [managed-account-orders]
                         (cons
-                         [(str "Timestamp (" (timezone->pretified timezone) ")")
+                         [(str "Timestamp (" (timezone->prettifier timezone) ")")
                           "Order ID"
                           "Name"
                           "Email"
