@@ -54,7 +54,9 @@
             [ring.middleware.json :refer [wrap-json-body wrap-json-response]]
             [ring.util.response :refer [header set-cookie response redirect]]
             [ring.middleware.cors :refer [wrap-cors]]
-            [ring.middleware.ssl :refer [wrap-ssl-redirect]]))
+            [ring.middleware.ssl :refer [wrap-ssl-redirect]]
+            [dk.ative.docjure.spreadsheet :as spreadsheet]
+            ))
 
 (defn wrap-page [resp]
   (header resp "content-type" "text/html; charset=utf-8"))
@@ -221,7 +223,7 @@
    {:uri "/download-stats-csv"
     :method "GET"
     :permissions ["download-stats"]}
-   {:uri "/total-orders"
+   {:uri "/total-orders-customer"
     :method "POST"
     :permissions ["download-stats"]}
    {:uri "/total-orders-fleet"
@@ -245,7 +247,7 @@
    {:uri "/flex-orders-per-courier"
     :method "POST"
     :permissions ["download-stats"]}
-   {:uri "/total-gallons"
+   {:uri "/total-gallons-customer"
     :method "POST"
     :permissions ["download-stats"]}
    {:uri "/total-gallons-fleet"
@@ -758,7 +760,7 @@
                       :db-conn (conn)
                       :response-type "csv"}))))
   ;; total gallons count
-  (POST "/total-gallons" {body :body}
+  (POST "/total-gallons-customer" {body :body}
         (response (let [b (keywordize-keys body)
                         {:keys [timezone timeframe response-type from-date
                                 to-date]} b]
@@ -1017,6 +1019,24 @@
                     (send-push-to-table-view (conn)
                                              (:message b)
                                              (:table-view b)))))
+  (GET "/test-xlsx" []
+       (let [wb (spreadsheet/create-workbook "Price List"
+                                             [["Name" "Price"]
+                                              ["Foo Widget" 100]
+                                              ["Bar Widget" 200]
+                                              ["Total" "=B2+B3"]
+                                              ])
+             sheet (spreadsheet/select-sheet "Price List" wb)
+             header-row (first (spreadsheet/row-seq sheet))]
+         (do
+           (spreadsheet/set-row-style! header-row (spreadsheet/create-cell-style! wb {:background :yellow,
+                                                                                      :font {:bold true}}))
+           (spreadsheet/save-workbook-into-file! "spreadsheet.xlsx"  wb)))
+       (-> (response (java.io.File. "spreadsheet.xlsx"))
+           (header "Content-Type:"
+                   "application/xlsx")
+           (header "Content-Disposition"
+                   "attachment; filename=\"spreadsheet.xlsx\"")))
   ;;!! search
   (POST "/search" {body :body}
         (response

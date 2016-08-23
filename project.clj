@@ -16,6 +16,7 @@
                  [ring/ring-jetty-adapter "1.4.0"]
                  [ring/ring-json "0.4.0"]
                  [ring/ring-ssl "0.2.1"]
+                 [dk.ative/docjure "1.10.0"]
                  [common "1.1.3-SNAPSHOT"]
                  [ring-cors "0.1.7"]
                  [opt "1.0.2-SNAPSHOT"]]

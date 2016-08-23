@@ -17,7 +17,9 @@
             [clj-time.core :as time]
             [clj-time.periodic :as periodic]
             [clj-time.coerce :as time-coerce]
-            [clj-time.format :as time-format]))
+            [clj-time.format :as time-format]
+            [dk.ative.docjure.spreadsheet :as spreadsheet]
+            ))
 
 (def count-filter (comp count filter))
 
@@ -970,7 +972,9 @@
                             (merge
                              base-request-map
                              {:select-statement
-                              "COUNT(DISTINCT id) as `orders`"}))]
-    ;;total-customer-orders
-    total-fleet-orders
+                              "COUNT(DISTINCT id) as `orders`"}))
+        report-map (insert-value-when-missing-index-map [total-customer-orders
+                                                         total-fleet-orders]
+                                                        :datetime 0)]
+    report-map
     ))
