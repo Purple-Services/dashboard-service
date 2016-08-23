@@ -954,18 +954,23 @@
                           :to-date to-date
                           :timezone timezone
                           :timeformat (timeframe->timeformat timeframe)}
-        get-query (fn [query-map]
+        get-query (fn [query-type query-map]
                     (total-for-select-response
                      db-conn
-                     (totals-query query-map)
+                     ((resolve (symbol query-type)) query-map)
                      "set"))
         total-customer-orders (get-query
+                               "totals-query"
                                (merge
                                 base-request-map
                                 {:select-statement
                                  "COUNT(DISTINCT id) as `orders`"}))
-        total-fleet-orders (merge
-                            base-request-map
-                            {:select-statement
-                             "COUNT(DISTINCT id) as `orders`"})]
-    total-customer-orders))
+        total-fleet-orders (get-query
+                            "totals-query-fleet-deliveries"
+                            (merge
+                             base-request-map
+                             {:select-statement
+                              "COUNT(DISTINCT id) as `orders`"}))]
+    ;;total-customer-orders
+    total-fleet-orders
+    ))
