@@ -221,7 +221,73 @@
    {:uri "/download-stats-csv"
     :method "GET"
     :permissions ["download-stats"]}
-   {:uri "/orders-per-day"
+   {:uri "/total-orders"
+    :method "POST"
+    :permissions ["download-stats"]}
+   {:uri "/total-orders-fleet"
+    :method "POST"
+    :permissions ["download-stats"]}
+   {:uri "/total-cancelled-orders"
+    :method "POST"
+    :permissions ["download-stats"]}
+   {:uri "/cancelled-unassigned-orders"
+    :method "POST"
+    :permissions ["download-stats"]}
+   {:uri "/orders-per-courier"
+    :method "POST"
+    :permissions ["download-stats"]}
+   {:uri "/canelled-orders-per-courier"
+    :method "POST"
+    :permissions ["download-stats"]}
+   {:uri "/scheduled-orders-per-courier"
+    :method "POST"
+    :permissions ["download-stats"]}
+   {:uri "/flex-orders-per-courier"
+    :method "POST"
+    :permissions ["download-stats"]}
+   {:uri "/total-gallons"
+    :method "POST"
+    :permissions ["download-stats"]}
+   {:uri "/total-gallons-fleet"
+    :method "POST"
+    :permissions ["download-stats"]}
+   {:uri "/total-87-gallons"
+    :method "POST"
+    :permissions ["download-stats"]}
+   {:uri "/total-91-gallons"
+    :method "POST"
+    :permissions ["download-stats"]}
+   {:uri "/gallons-per-courier"
+    :method "POST"
+    :permissions ["download-stats"]}
+   {:uri "/gallons-87-per-courier"
+    :method "POST"
+    :permissions ["download-stats"]}
+   {:uri "/gallons-91-per-courier"
+    :method "POST"
+    :permissions ["download-stats"]}
+   {:uri "/total-revenue"
+    :method "POST"
+    :permissions ["download-stats"]}
+   {:uri "/revenue-per-courier"
+    :method "POST"
+    :permissions ["download-stats"]}
+   {:uri "/fuel-price"
+    :method "POST"
+    :permissions ["download-stats"]}
+   {:uri "/fuel-price-per-courier"
+    :method "POST"
+    :permissions ["download-stats"]}
+   {:uri "/service-fees-per-courier"
+    :method "POST"
+    :permissions ["download-stats"]}
+   {:uri "/referral-gallons-cost"
+    :method "POST"
+    :permissions ["download-stats"]}
+   {:uri "/referral-gallons-cost-per-courier"
+    :method "POST"
+    :permissions ["download-stats"]}
+   {:uri "/coupon-cost"
     :method "POST"
     :permissions ["download-stats"]}
    {:uri "/fleets-invoice"
@@ -571,7 +637,7 @@
            (header "Content-Disposition"
                    "attachment; filename=\"stats.csv\"")))
   ;; orders count
-  (POST "/total-orders" {body :body}
+  (POST "/total-orders-customer" {body :body}
         (response (let [b (keywordize-keys body)
                         {:keys [timezone timeframe response-type from-date
                                 to-date]} b]
@@ -586,6 +652,22 @@
                        :timeformat (analytics/timeframe->timeformat
                                     timeframe)})
                      response-type))))
+  (POST "/total-orders-fleet" {body :body}
+        (response (let [b (keywordize-keys body)
+                        {:keys [timezone timeframe response-type from-date
+                                to-date]} b]
+                    (analytics/total-for-select-response
+                     (conn)
+                     (analytics/totals-query-fleet-deliveries
+                      {:select-statement
+                       "COUNT(DISTINCT id) as `orders`"
+                       :from-date from-date
+                       :to-date to-date
+                       :timezone timezone
+                       :timeformat (analytics/timeframe->timeformat
+                                    timeframe)})
+                     response-type))))
+  ;; cancelled orders
   (POST "/total-cancelled-orders" {body :body}
         (response (let [b (keywordize-keys body)
                         {:keys [timezone timeframe response-type from-date
@@ -683,6 +765,20 @@
                     (analytics/total-for-select-response
                      (conn)
                      (analytics/totals-query
+                      {:select-statement "SUM(`gallons`) as `gallons`"
+                       :from-date from-date
+                       :to-date to-date
+                       :timezone timezone
+                       :timeformat (analytics/timeframe->timeformat
+                                    timeframe)})
+                     response-type))))
+  (POST "/total-gallons-fleet" {body :body}
+        (response (let [b (keywordize-keys body)
+                        {:keys [timezone timeframe response-type from-date
+                                to-date]} b]
+                    (analytics/total-for-select-response
+                     (conn)
+                     (analytics/totals-query-fleet-deliveries
                       {:select-statement "SUM(`gallons`) as `gallons`"
                        :from-date from-date
                        :to-date to-date

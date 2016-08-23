@@ -8,7 +8,7 @@
             [clojure.core.matrix :as mat]
             [clojure.java.jdbc :as sql]
             [clojure.string :as s]
-            [clojure.set :refer [rename-keys join]]
+            [clojure.set :refer [rename rename-keys join union difference]]
             [clojure.data.csv :as csv]
             [clojure-csv.core :refer [write-csv]]
             [clojure.java.io :as io]
@@ -496,9 +496,16 @@
                          (into [])
                          (mat/transpose)
                          (vec-of-vec-elements->str)
-                         (write-csv))]
+                         (write-csv)
+                         )]
             {:data csv
-             :type "csv"}))))
+             :type "csv"})
+          (= response-type "set")
+          (let [set-map (->> query-result
+                             (map #(vec (vals %)))
+                             (map #(hash-map :x (first %) :y (second %)))
+                             (into #{}))]
+            (rename set-map {:x :datetime})))))
 
 (defn per-courier-response
   "Return a response from db-conn for sql generated using per-courier-query.
@@ -901,3 +908,64 @@
                                           account-name-report-csv-strings)]
       {:data account-name-report-csv
        :success true})))
+
+(defn get-by-index
+  "Get an el from coll whose k is equal to v. Returns nil if el doesn't exist"
+  [coll k v]
+  (first (filter #(= (k %) v) coll)))
+
+(defn insert-value-when-missing-index-map
+  "Given a vector of sets, with each set being composed of hash-maps with two
+  key/val pairs of which one key is equivalent to index, return a vector of sets
+  where a new key/val is inserted into each set of the form
+  {<index_key> <index_val>
+   <key1> v}
+  for which a corresponding <index_val> exists in any of the other sets.
+
+  ex:
+  > (insert-value-when-missing-index-map [#{{:index 1 :x 1} {:index 2 :x 2}
+                                            {:index 3 :x 3}}
+                                          #{{:index 1 :y 1} {:index 2 :y 2}}
+                                          #{{:index 2 :z 2} {:index 3 :z 3}}]
+                                         :index 0)
+  -> [#{{:index 2, :x 2} {:index 1, :x 1} {:index 3, :x 3}}
+      #{{:index 1, :y 1} {:index 2, :y 2} {:y 0, :index 3}}
+      #{{:index 2, :z 2} {:index 3, :z 3} {:index 1, :z 0}}]"
+  [sets-vector index v]
+  (let [all-index-vals (->> sets-vector
+                            (apply union)
+                            (map index)
+                            distinct)
+        insert-val   (fn [vs xrel]
+                       (let [not-index (first (difference
+                                               (set (keys (first xrel)))
+                                               #{index}))]
+                         (set (map #(if-let [xrel-el (get-by-index xrel index %)]
+                                      xrel-el
+                                      (hash-map index %
+                                                not-index v)) vs))))]
+    (into [] (map (partial insert-val all-index-vals) sets-vector))))
+
+(defn analytics-report-for-totals
+  "Generate a combined report"
+
+  [{:keys [db-conn from-date to-date timezone timeframe]}]
+  (let [base-request-map {:from-date from-date
+                          :to-date to-date
+                          :timezone timezone
+                          :timeformat (timeframe->timeformat timeframe)}
+        get-query (fn [query-map]
+                    (total-for-select-response
+                     db-conn
+                     (totals-query query-map)
+                     "set"))
+        total-customer-orders (get-query
+                               (merge
+                                base-request-map
+                                {:select-statement
+                                 "COUNT(DISTINCT id) as `orders`"}))
+        total-fleet-orders (merge
+                            base-request-map
+                            {:select-statement
+                             "COUNT(DISTINCT id) as `orders`"})]
+    total-customer-orders))
