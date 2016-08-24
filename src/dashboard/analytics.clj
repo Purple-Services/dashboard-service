@@ -948,33 +948,189 @@
                                                 not-index v)) vs))))]
     (into [] (map (partial insert-val all-index-vals) sets-vector))))
 
-(defn analytics-report-for-totals
-  "Generate a combined report"
+(defn map-val-to-new-key
+  "Given a set of maps, map a two argument f to k1 and k2 and merge the result
+  as the value to new-key. Assumes all maps have k1 and k2, throws error
+  otherwise "
+  [coll f k1 k2 new-key]
+  (if (and (every? #(contains? % k1) coll)
+           (every? #(contains? % k2) coll))
+    (let [merge-fn (fn [m]
+                     (merge m {new-key (f (k1 m)
+                                          (k2 m))}))]
+      (into #{} (map merge-fn coll)))
+    (throw (Exception. "k1 and k2 do not both exist in every map of coll."))))
 
+(defn report-for-totals-set
+  "Generate raw set for reports of totals on orders and fleet-deliveries"
   [{:keys [db-conn from-date to-date timezone timeframe]}]
   (let [base-request-map {:from-date from-date
                           :to-date to-date
                           :timezone timezone
                           :timeformat (timeframe->timeformat timeframe)}
-        get-query (fn [query-type query-map]
-                    (total-for-select-response
-                     db-conn
-                     ((resolve (symbol query-type)) query-map)
-                     "set"))
-        total-customer-orders (get-query
-                               "totals-query"
-                               (merge
-                                base-request-map
-                                {:select-statement
-                                 "COUNT(DISTINCT id) as `orders`"}))
-        total-fleet-orders (get-query
-                            "totals-query-fleet-deliveries"
-                            (merge
-                             base-request-map
-                             {:select-statement
-                              "COUNT(DISTINCT id) as `orders`"}))
-        report-map (insert-value-when-missing-index-map [total-customer-orders
-                                                         total-fleet-orders]
-                                                        :datetime 0)]
-    report-map
-    ))
+        get-query (fn [query-type query-map rename-map]
+                    (let [response (total-for-select-response
+                                    db-conn
+                                    ((resolve (symbol query-type)) query-map)
+                                    "set")]
+                      (if-not (empty? response)
+                        (rename response rename-map)
+                        (rename #{{:datetime (:from-date query-map)
+                                   :y 0}}
+                                rename-map))))
+        ;; --- orders
+        app-orders (get-query
+                    "totals-query"
+                    (merge
+                     base-request-map
+                     {:select-statement
+                      "COUNT(DISTINCT id) as `orders`"})
+                    {:y :app-orders})
+        fleet-orders  (get-query
+                       "totals-query-fleet-deliveries"
+                       (merge
+                        base-request-map
+                        {:select-statement
+                         "COUNT(DISTINCT id) as `orders`"})
+                       {:y :fleet-orders})
+        ;; --- cancelled orders
+        cancelled-orders (get-query
+                          "totals-query"
+                          (merge
+                           base-request-map
+                           {:select-statement
+                            "COUNT(DISTINCT id) as `orders`"
+                            :order-status "cancelled"})
+                          {:y :cancelled-orders})
+        cancelled-unassigned-orders (get-query
+                                     "totals-query"
+                                     (merge
+                                      base-request-map
+                                      {:select-statement
+                                       "COUNT(DISTINCT id) as `orders`"
+                                       :where-clause
+                                       "AND `orders`.`courier_id` = ''"
+                                       :order-status "cancelled"})
+                                     {:y :cancelled-unassigned-orders})
+        ;; --- gallons
+        app-user-gallons (get-query
+                          "totals-query"
+                          (merge
+                           base-request-map
+                           {:select-statement
+                            "SUM(`gallons`) as `gallons`"})
+                          {:y :app-user-gallons})
+        app-user-87-gallons (get-query
+                             "totals-query"
+                             (merge
+                              base-request-map
+                              {:select-statement
+                               "SUM(`gallons`) as `gallons`"
+                               :where-clause "AND `gas_type` = '87'"})
+                             {:y :app-user-87-gallons})
+        app-user-91-gallons (get-query
+                             "totals-query"
+                             (merge
+                              base-request-map
+                              {:select-statement
+                               "SUM(`gallons`) as `gallons`"
+                               :where-clause "AND `gas_type` = '91'"})
+                             {:y :app-user-91-gallons})
+        fleet-gallons (get-query
+                       "totals-query-fleet-deliveries"
+                       (merge
+                        base-request-map
+                        {:select-statement
+                         "SUM(`gallons`) as `gallons`"})
+                       {:y :fleet-gallons})
+        fleet-87-gallons (get-query
+                          "totals-query-fleet-deliveries"
+                          (merge
+                           base-request-map
+                           {:select-statement
+                            "SUM(`gallons`) as `gallons`"
+                            :where-clause "AND `gas_type` = '87'"})
+                          {:y :fleet-87-gallons})
+        fleet-91-gallons (get-query
+                          "totals-query-fleet-deliveries"
+                          (merge
+                           base-request-map
+                           {:select-statement
+                            "SUM(`gallons`) as `gallons`"
+                            :where-clause "AND `gas_type` = '91'"})
+                          {:y :fleet-91-gallons})
+        ;; --- revenue
+        app-user-revenue (get-query
+                          "totals-query"
+                          (merge
+                           base-request-map
+                           {:select-statement
+                            "FORMAT(SUM(`total_price`) / 100,2) as `price`"})
+                          {:y :app-user-revenue})
+        app-user-service-fees-revenue
+        (get-query
+         "totals-query"
+         (merge
+          base-request-map
+          {:select-statement
+           "FORMAT(SUM(`service_fee`) / 100,2) as `service_fee`"})
+         {:y :app-user-service-fees-revenue})
+        app-user-fuel-revenue
+        (get-query
+         "totals-query"
+         (merge
+          base-request-map
+          {:select-statement
+           "FORMAT(SUM(`gallons` * `gas_price`) / 100,2) as `fuel_price`"})
+         {:y :app-user-fuel-revenue})
+        ;; --- costs
+        referral-gallons-cost
+        (get-query
+         "totals-query"
+         (merge
+          base-request-map
+          {:select-statement
+           "FORMAT(SUM(`referral_gallons_used` * `gas_price`) / 100,2) AS `count`"})
+         {:y :referral-gallons-cost})
+        coupons-cost
+        (get-query
+         "totals-query"
+         (merge
+          base-request-map
+          {:select-statement
+           "format(abs(sum(service_fee + (gas_price * (gallons - referral_gallons_used) - total_price))/100),2) as `coupon_value`"
+           :where-clause "AND `user_id` NOT IN ('evU83hVPIbccvZE0C2uL','nszMr7cDRfRrbTksXaEC','k4KTi1xmes8LLd9ZZhsH')"})
+         {:y :coupons-cost})
+        report-map (insert-value-when-missing-index-map
+                    [app-orders
+                     fleet-orders
+                     cancelled-orders
+                     cancelled-unassigned-orders
+                     app-user-gallons
+                     app-user-87-gallons
+                     app-user-91-gallons
+                     fleet-gallons
+                     fleet-87-gallons
+                     fleet-91-gallons
+                     app-user-revenue
+                     app-user-service-fees-revenue
+                     app-user-fuel-revenue
+                     referral-gallons-cost
+                     coupons-cost]
+                    :datetime 0)
+        report-set (reduce join report-map)
+        total-orders (map-val-to-new-key
+                      report-set
+                      +
+                      :app-orders
+                      :fleet-orders
+                      :total-orders)
+        total-gallons-sold (map-val-to-new-key
+                            report-set
+                            +
+                            :app-user-gallons
+                            :fleet-gallons
+                            :total-gallons)
+        final-set (reduce join [total-orders
+                                total-gallons-sold])]
+    final-set))
