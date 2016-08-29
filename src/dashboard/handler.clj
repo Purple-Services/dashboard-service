@@ -900,7 +900,7 @@
                     (analytics/total-for-select-response
                      (conn)
                      (analytics/totals-query
-                      {:select-statement "FORMAT(SUM(`gallons` * `gas_price`) / 100,2) as `fuel_price`"
+                      {:select-statement "FORMAT(SUM((`gallons` - `referral_gallons_used`) * `gas_price`) / 100,2) as `fuel_price`"
                        :from-date from-date
                        :to-date to-date
                        :timezone timezone
@@ -1031,7 +1031,7 @@
          (do
            (spreadsheet/set-row-style! header-row (spreadsheet/create-cell-style! wb {:background :yellow,
                                                                                       :font {:bold true}}))
-           (spreadsheet/save-workbook-into-file! "spreadsheet.xlsx"  wb)))
+           (spreadsheet/save-workbook-into-file! "spreadsheet.xlsx" wb)))
        (-> (response (java.io.File. "spreadsheet.xlsx"))
            (header "Content-Type:"
                    "application/xlsx")

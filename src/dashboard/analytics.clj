@@ -522,7 +522,13 @@
                            (write-csv))]
               {:data csv
                :type "csv"})
-      "sql-map" query-result)))
+      "sql-map" query-result
+      "set" (rename query-result
+                    {(first (difference (set (keys (first query-result)))
+                                        #{:name :date}))
+                     :y
+                     :date
+                     :datetime}))))
 
 (defn get-event-within-timestamps
   "Return a MySQL string for retrieving event in event-log-name that occurs
@@ -876,7 +882,7 @@
                           "Plate Number"
                           "Octane"
                           "Top Tier?"
-                          "Tire Pressure Check?"
+                          "Tire Pressure Fillup?"
                           "Gallons"
                           "Gallon Price"
                           "Service Fee"
@@ -978,6 +984,7 @@
                         (rename #{{:datetime (:from-date query-map)
                                    :y 0}}
                                 rename-map))))
+        formatted-adder #(read-string (format "%.2f" (+ %1 %2)))
         ;; --- orders
         app-orders (get-query
                     "totals-query"
@@ -1065,7 +1072,7 @@
                           (merge
                            base-request-map
                            {:select-statement
-                            "FORMAT(SUM(`total_price`) / 100,2) as `price`"})
+                            "ROUND(SUM(`total_price`) / 100,2) as `price`"})
                           {:y :app-user-revenue})
         app-user-service-fees-revenue
         (get-query
@@ -1073,7 +1080,7 @@
          (merge
           base-request-map
           {:select-statement
-           "FORMAT(SUM(`service_fee`) / 100,2) as `service_fee`"})
+           "ROUND(SUM(`service_fee`) / 100,2) as `service_fee`"})
          {:y :app-user-service-fees-revenue})
         app-user-fuel-revenue
         (get-query
@@ -1081,7 +1088,7 @@
          (merge
           base-request-map
           {:select-statement
-           "FORMAT(SUM(`gallons` * `gas_price`) / 100,2) as `fuel_price`"})
+           "ROUND(SUM((`gallons` - `referral_gallons_used`) * `gas_price`) / 100,2) as `fuel_price`"})
          {:y :app-user-fuel-revenue})
         ;; --- costs
         referral-gallons-cost
@@ -1090,7 +1097,7 @@
          (merge
           base-request-map
           {:select-statement
-           "FORMAT(SUM(`referral_gallons_used` * `gas_price`) / 100,2) AS `count`"})
+           "ROUND(SUM(`referral_gallons_used` * `gas_price`) / 100,2) AS `count`"})
          {:y :referral-gallons-cost})
         coupons-cost
         (get-query
@@ -1098,7 +1105,7 @@
          (merge
           base-request-map
           {:select-statement
-           "format(abs(sum(service_fee + (gas_price * (gallons - referral_gallons_used) - total_price))/100),2) as `coupon_value`"
+           "ROUND(abs(sum(service_fee + (gas_price * (gallons - referral_gallons_used) - total_price))/100),2) as `coupon_value`"
            :where-clause "AND `user_id` NOT IN ('evU83hVPIbccvZE0C2uL','nszMr7cDRfRrbTksXaEC','k4KTi1xmes8LLd9ZZhsH')"})
          {:y :coupons-cost})
         report-map (insert-value-when-missing-index-map
@@ -1130,7 +1137,304 @@
                             +
                             :app-user-gallons
                             :fleet-gallons
-                            :total-gallons)
+                            :total-gallons-sold)
+        total-costs (map-val-to-new-key
+                     report-set
+                     formatted-adder
+                     :referral-gallons-cost
+                     :coupons-cost
+                     :total-costs)
         final-set (reduce join [total-orders
-                                total-gallons-sold])]
-    final-set))
+                                total-gallons-sold
+                                total-costs])
+        header-col  ["Report"
+                     "Total Orders Completed"
+                     "App Users Orders"
+                     "Fleet Orders"
+                     "App Users Cancelled Orders"
+                     "App Users Cancelled Unassigned Orders"
+                     "Total Gallons Sold"
+                     "App Users"
+                     "87"
+                     "91"
+                     "Fleet"
+                     "87"
+                     "91"
+                     "App User Revenue"
+                     "Service Fees"
+                     "Fuel"
+                     "Total Costs"
+                     "Referral Gallons Cost"
+                     "Coupon Cost"]
+        data-vectors (->> final-set
+                          (map #(vector (:datetime %)
+                                        (:total-orders %)
+                                        (:app-orders %)
+                                        (:fleet-orders %)
+                                        (:cancelled-orders %)
+                                        (:cancelled-unassigned-orders %)
+                                        (:total-gallons-sold %)
+                                        (:app-user-gallons %)
+                                        (:app-user-87-gallons %)
+                                        (:app-user-91-gallons %)
+                                        (:fleet-gallons %)
+                                        (:fleet-87-gallons %)
+                                        (:fleet-91-gallons %)
+                                        (:app-user-revenue %)
+                                        (:app-user-service-fees-revenue %)
+                                        (:app-user-fuel-revenue %)
+                                        (:total-costs %)
+                                        (:referral-gallons-cost %)
+                                        (:coupons-cost %)))
+                          (sort-by first)
+                          (cons header-col)
+                          (into [])
+                          (mat/transpose)
+                          )]
+    data-vectors))
+
+(defn vectors->spreadsheet
+  "Given a vector of vectors, generate a spreadsheet of kind where
+  kind is csv or xlsx"
+  [vectors kind]
+  (condp = kind
+    "csv"
+    (->> vectors
+         (vec-of-vec-elements->str)
+         (write-csv))
+    "xlsx"
+    ;; this is a hack, this would obviously need to be streamed
+    (let [wb (spreadsheet/create-workbook "Totals" vectors)]
+      (spreadsheet/save-workbook-into-file! "spreadsheet.xlsx" wb))))
+
+;; fn from http://www.rkn.io/2014/02/13/clojure-cookbook-date-ranges/
+(defn time-range
+  "Return a lazy sequence of DateTime's from start to end, incremented
+  by 'step' units of time."
+  [start end step]
+  (let [inf-range (periodic/periodic-seq start step)
+        below-end? (fn [t] (time/within? (time/interval start end)
+                                         t))]
+    (take-while below-end? inf-range)))
+
+
+(defn report-for-couriers-set
+  "Generate raw set for reports of couriers on orders and fleet-deliveries"
+  [{:keys [db-conn from-date to-date timezone timeframe]}]
+  (let [base-request-map {:from-date from-date
+                          :to-date to-date
+                          :timezone timezone
+                          :timeformat (timeframe->timeformat timeframe)}
+        get-query (fn [query-type query-map rename-map]
+                    (let [response (per-courier-response
+                                    db-conn
+                                    ((resolve (symbol query-type)) query-map)
+                                    "set")]
+                      (if-not (empty? response)
+                        (rename response rename-map)
+                        (rename #{{:datetime (:from-date query-map)
+                                   :y 0}}
+                                rename-map))))
+        formatted-adder #(read-string (format "%.2f" (+ %1 %2)))
+        ;; --- orders
+        app-orders (get-query
+                    "per-courier-query"
+                    (merge
+                     base-request-map
+                     {:select-statement
+                      "COUNT(0) AS `count`"})
+                    {:y :app-orders})
+        fleet-orders  (get-query
+                       "per-courier-query-fleet-deliveries"
+                       (merge
+                        base-request-map
+                        {:select-statement
+                         "COUNT(0) AS `count`"})
+                       {:y :fleet-orders})
+        ;; --- cancelled orders
+        cancelled-orders (get-query
+                          "per-courier-query"
+                          (merge
+                           base-request-map
+                           {:select-statement
+                            "COUNT(0) as `count`"
+                            :order-status "cancelled"
+                            :where-clause "AND `orders`.`courier_id` != ''"
+                            })
+                          {:y :cancelled-orders})
+        ;; --- gallons
+        app-user-gallons (get-query
+                          "per-courier-query"
+                          (merge
+                           base-request-map
+                           {:select-statement
+                            "SUM(`gallons`) as `gallons`"})
+                          {:y :app-user-gallons})
+        app-user-87-gallons (get-query
+                             "per-courier-query"
+                             (merge
+                              base-request-map
+                              {:select-statement
+                               "SUM(`gallons`) as `gallons`"
+                               :where-clause "AND `gas_type` = '87'"})
+                             {:y :app-user-87-gallons})
+        app-user-91-gallons (get-query
+                             "per-courier-query"
+                             (merge
+                              base-request-map
+                              {:select-statement
+                               "SUM(`gallons`) as `gallons`"
+                               :where-clause "AND `gas_type` = '91'"})
+                             {:y :app-user-91-gallons})
+        fleet-gallons (get-query
+                       "per-courier-query-fleet-deliveries"
+                       (merge
+                        base-request-map
+                        {:select-statement
+                         "SUM(`gallons`) as `gallons`"})
+                       {:y :fleet-gallons})
+        fleet-87-gallons (get-query
+                          "per-courier-query-fleet-deliveries"
+                          (merge
+                           base-request-map
+                           {:select-statement
+                            "SUM(`gallons`) as `gallons`"
+                            :where-clause "AND `gas_type` = '87'"})
+                          {:y :fleet-87-gallons})
+        fleet-91-gallons (get-query
+                          "per-courier-query-fleet-deliveries"
+                          (merge
+                           base-request-map
+                           {:select-statement
+                            "SUM(`gallons`) as `gallons`"
+                            :where-clause "AND `gas_type` = '91'"})
+                          {:y :fleet-91-gallons})
+        ;; --- revenue
+        app-user-revenue (get-query
+                          "per-courier-query"
+                          (merge
+                           base-request-map
+                           {:select-statement
+                            "ROUND(SUM(`total_price`) / 100,2) as `price`"})
+                          {:y :app-user-revenue})
+        app-user-service-fees-revenue
+        (get-query
+         "per-courier-query"
+         (merge
+          base-request-map
+          {:select-statement
+           "ROUND(SUM(`service_fee`) / 100,2) as `service_fee`"})
+         {:y :app-user-service-fees-revenue})
+        app-user-fuel-revenue
+        (get-query
+         "per-courier-query"
+         (merge
+          base-request-map
+          {:select-statement
+           "ROUND(SUM((`gallons` - `referral_gallons_used`) * `gas_price`) / 100,2) as `fuel_price`"})
+         {:y :app-user-fuel-revenue})
+        ;; --- costs
+        referral-gallons-cost
+        (get-query
+         "per-courier-query"
+         (merge
+          base-request-map
+          {:select-statement
+           "ROUND(SUM(`referral_gallons_used` * `gas_price`) / 100,2) AS `count`"})
+         {:y :referral-gallons-cost})
+        coupons-cost
+        (get-query
+         "per-courier-query"
+         (merge
+          base-request-map
+          {:select-statement
+           "ROUND(abs(sum(service_fee + (gas_price * (gallons - referral_gallons_used) - total_price))/100),2) as `coupon_value`"
+           :where-clause "AND `user_id` NOT IN ('evU83hVPIbccvZE0C2uL','nszMr7cDRfRrbTksXaEC','k4KTi1xmes8LLd9ZZhsH')"})
+         {:y :coupons-cost})
+        report-map (insert-value-when-missing-index-map
+                    [app-orders
+                     fleet-orders
+                     cancelled-orders
+                     app-user-gallons
+                     app-user-87-gallons
+                     app-user-91-gallons
+                     fleet-gallons
+                     fleet-87-gallons
+                     fleet-91-gallons
+                     app-user-revenue
+                     app-user-service-fees-revenue
+                     app-user-fuel-revenue
+                     referral-gallons-cost
+                     coupons-cost]
+                    :datetime 0)
+        report-set (reduce join report-map)
+        ;; total-orders (map-val-to-new-key
+        ;;               report-set
+        ;;               +
+        ;;               :app-orders
+        ;;               :fleet-orders
+        ;;               :total-orders)
+        ;; total-gallons-sold (map-val-to-new-key
+        ;;                     report-set
+        ;;                     +
+        ;;                     :app-user-gallons
+        ;;                     :fleet-gallons
+        ;;                     :total-gallons-sold)
+        ;; total-costs (map-val-to-new-key
+        ;;              report-set
+        ;;              formatted-adder
+        ;;              :referral-gallons-cost
+        ;;              :coupons-cost
+        ;;              :total-costs)
+        ;; final-set (reduce join [total-orders
+        ;;                         total-gallons-sold
+        ;;                         total-costs])
+        ;; header-col  ["Report"
+        ;;              "Total Orders Completed"
+        ;;              "App Users Orders"
+        ;;              "Fleet Orders"
+        ;;              "App Users Cancelled Orders"
+        ;;              "App Users Cancelled Unassigned Orders"
+        ;;              "Total Gallons Sold"
+        ;;              "App Users"
+        ;;              "87"
+        ;;              "91"
+        ;;              "Fleet"
+        ;;              "87"
+        ;;              "91"
+        ;;              "App User Revenue"
+        ;;              "Service Fees"
+        ;;              "Fuel"
+        ;;              "Total Costs"
+        ;;              "Referral Gallons Cost"
+        ;;              "Coupon Cost"]
+        ;; data-vectors (->> final-set
+        ;;                   (map #(vector (:datetime %)
+        ;;                                 (:total-orders %)
+        ;;                                 (:app-orders %)
+        ;;                                 (:fleet-orders %)
+        ;;                                 (:cancelled-orders %)
+        ;;                                 (:cancelled-unassigned-orders %)
+        ;;                                 (:total-gallons-sold %)
+        ;;                                 (:app-user-gallons %)
+        ;;                                 (:app-user-87-gallons %)
+        ;;                                 (:app-user-91-gallons %)
+        ;;                                 (:fleet-gallons %)
+        ;;                                 (:fleet-87-gallons %)
+        ;;                                 (:fleet-91-gallons %)
+        ;;                                 (:app-user-revenue %)
+        ;;                                 (:app-user-service-fees-revenue %)
+        ;;                                 (:app-user-fuel-revenue %)
+        ;;                                 (:total-costs %)
+        ;;                                 (:referral-gallons-cost %)
+        ;;                                 (:coupons-cost %)))
+        ;;                   (sort-by first)
+        ;;                   (cons header-col)
+        ;;                   (into [])
+        ;;                   (mat/transpose)
+        ;;                   )
+        ]
+    ;;data-vectors
+    ;;report-set
+    report-map
+    ))
