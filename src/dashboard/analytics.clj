@@ -815,10 +815,7 @@
     ;; make sure there wasn't an error retrieving vins
     (if (:success get-info-batch-result)
       ;; generate reports
-      (let [_ (println {:from-date from-date
-                        :to-date to-date
-                        :timezone timezone})
-            vins-info (:resp get-info-batch-result)
+      (let [vins-info (:resp get-info-batch-result)
             fleet-result-vins-info (join vins-info fleet-result)
             grouped-set            (group-by :account-name
                                              fleet-result-vins-info)

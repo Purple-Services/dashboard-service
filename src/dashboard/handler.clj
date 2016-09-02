@@ -587,7 +587,6 @@
                       (and (= (.length status-file) 0)
                            (.exists status-file))
                       (do
-                        (println "file is 0 length")
                         {:success false
                          :message "processing"})
                       ;; stats file doesn't exist or has
@@ -596,7 +595,6 @@
                       (or (not (.exists status-file))
                           (> (.length status-file) 0))
                       (do
-                        (println "file doesn't exist is larger than 0")
                         ;; have to touch filename so that
                         ;; we can tell when the file is processing
                         (spit filename "")
@@ -623,8 +621,7 @@
                                        generator-parameters))
                               {:success true})
                           "fleet-accounts.xlsx"
-                          (do (println "got fleet-accounts.xlsx")
-                              (future (analytics/generate-fleet-accounts-xlsx
+                          (do (future (analytics/generate-fleet-accounts-xlsx
                                        generator-parameters))
                               {:success true})
                           ;; unknown error
