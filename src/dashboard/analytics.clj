@@ -107,122 +107,123 @@
   (when-let [first-order-by-user (get-first-order-by-user-memoized user orders)]
     (= date (unix->ymd (:target_time_start first-order-by-user)))))
 
-(defn gen-stats-csv
-  "Generates and saves a CSV file with some statistics."
+(defn generate-stats-xlsx
+  "Generates and saves a stats.xlsx file with some statistics."
   []
-  (with-open [out-file (io/writer "stats.csv")]
-    (csv/write-csv
-     out-file
-     (let [db-conn (conn)
-           dates (map joda->ymd
-                      (take-while #(time/before? % (time/now))
-                                  (periodic/periodic-seq  ;; Apr 10th
-                                   (time-coerce/from-long 1428708478000)
-                                   (time/hours 24))))
-           users (!select db-conn "users" [:timestamp_created :id] {})
-           users-by-day (users-by-day users)
-           orders (!select db-conn "orders" [:target_time_start :event_log
-                                             :target_time_end :status
-                                             :coupon_code :user_id] {})
-           completed-orders (filter #(= "complete" (:status %)) orders)
-           orders-by-day (orders-by-day orders)
-           coupons (!select db-conn "coupons" [:type :code] {})
-           standard-coupon-codes (->> (filter #(= "standard" (:type %)) coupons)
-                                      (map :code))]
-       (apply
-        mapv
-        vector
-        (concat [["Date"
-                  "New Users"
-                  "New Active Users"
-                  "Referral Coupons Used"
-                  "Standard Coupons Used"
-                  "First-Time Orders"
-                  "Recurrent Orders"
-                  "Cancelled Orders"
-                  "Completed Orders"
-                  "On-Time Completed Orders"
-                  "Late Completed Orders"
-                  "Cumulative Single Order Users"
-                  "Cumulative Double Order Users"
-                  "Cumulative 3 or More Orders Users"]]
-                (map (fn [date]
-                       (let [us (get users-by-day date)
-                             os (get orders-by-day date)
+  (let [db-conn (conn)
+        dates (map joda->ymd
+                   (take-while #(time/before? % (time/now))
+                               (periodic/periodic-seq  ;; Apr 10th
+                                (time-coerce/from-long 1428708478000)
+                                (time/hours 24))))
+        users (!select db-conn "users" [:timestamp_created :id] {})
+        users-by-day (users-by-day users)
+        orders (!select db-conn "orders" [:target_time_start :event_log
+                                          :target_time_end :status
+                                          :coupon_code :user_id] {})
+        completed-orders (filter #(= "complete" (:status %)) orders)
+        orders-by-day (orders-by-day orders)
+        coupons (!select db-conn "coupons" [:type :code] {})
+        standard-coupon-codes (->> (filter #(= "standard" (:type %)) coupons)
+                                   (map :code))
+        data-vectors
+        (apply
+         mapv
+         vector
+         (concat [["Date"
+                   "New Users"
+                   "New Active Users"
+                   "Referral Coupons Used"
+                   "Standard Coupons Used"
+                   "First-Time Orders"
+                   "Recurrent Orders"
+                   "Cancelled Orders"
+                   "Completed Orders"
+                   "On-Time Completed Orders"
+                   "Late Completed Orders"
+                   "Cumulative Single Order Users"
+                   "Cumulative Double Order Users"
+                   "Cumulative 3 or More Orders Users"]]
+                 (map (fn [date]
+                        (let [us (get users-by-day date)
+                              os (get orders-by-day date)
 
-                             num-complete ;; Number of complete orders that day
-                             (count-filter #(= "complete" (:status %)) os)
+                              num-complete ;; Number of complete orders that day
+                              (count-filter #(= "complete" (:status %)) os)
 
-                             num-complete-late ;; Completed, but late
-                             (count-filter #(let [completion-time
-                                                  (-> (str "kludgeFixLater 1|"
-                                                           (:event_log %))
-                                                      (s/split #"\||\s")
-                                                      (->> (apply hash-map))
-                                                      (get "complete"))]
-                                              (and completion-time
-                                                   (> (Integer. completion-time)
-                                                      (:target_time_end %))))
-                                           os)
+                              num-complete-late ;; Completed, but late
+                              (count-filter #(let [completion-time
+                                                   (-> (str "kludgeFixLater 1|"
+                                                            (:event_log %))
+                                                       (s/split #"\||\s")
+                                                       (->> (apply hash-map))
+                                                       (get "complete"))]
+                                               (and completion-time
+                                                    (> (Integer. completion-time)
+                                                       (:target_time_end %))))
+                                            os)
 
-                             new-active-users ;; Made first order that day
-                             (count-filter #(made-first-order-this-day
-                                             %
-                                             date
-                                             orders)
-                                           users)]
-                         (vec [;; date in "1989-08-01" format
-                               date
+                              new-active-users ;; Made first order that day
+                              (count-filter #(made-first-order-this-day
+                                              %
+                                              date
+                                              orders)
+                                            users)]
+                          (vec [;; date in "1989-08-01" format
+                                date
 
-                               ;; new users (all)
-                               (count us)
+                                ;; new users (all)
+                                (count us)
 
-                               ;; made first order that day
-                               new-active-users
+                                ;; made first order that day
+                                new-active-users
 
-                               ;; referral coupons
-                               (count-filter
-                                #(and (not (s/blank? (:coupon_code %)))
-                                      (not (in? standard-coupon-codes
-                                                (:coupon_code %))))
-                                os)
+                                ;; referral coupons
+                                (count-filter
+                                 #(and (not (s/blank? (:coupon_code %)))
+                                       (not (in? standard-coupon-codes
+                                                 (:coupon_code %))))
+                                 os)
 
-                               ;; standard coupons
-                               (count-filter
-                                (comp (partial in? standard-coupon-codes)
-                                      :coupon_code)
-                                os)
+                                ;; standard coupons
+                                (count-filter
+                                 (comp (partial in? standard-coupon-codes)
+                                       :coupon_code)
+                                 os)
 
-                               ;; first-time orders
-                               new-active-users
+                                ;; first-time orders
+                                new-active-users
 
-                               ;; recurrent
-                               (- (count os) new-active-users)
+                                ;; recurrent
+                                (- (count os) new-active-users)
 
-                               ;; cancelled
-                               (count-filter #(= "cancelled" (:status %)) os)
+                                ;; cancelled
+                                (count-filter #(= "cancelled" (:status %)) os)
 
-                               ;; completed
-                               num-complete
+                                ;; completed
+                                num-complete
 
-                               ;; completed on-time
-                               (- num-complete num-complete-late)
+                                ;; completed on-time
+                                (- num-complete num-complete-late)
 
-                               ;; completed late
-                               num-complete-late
+                                ;; completed late
+                                num-complete-late
 
-                               ;; cumulatively ordered once
-                               (users-ordered-to-date completed-orders date
-                                                      (fn [x] (= x 1)))
-                               ;; cumulatively ordered twice
-                               (users-ordered-to-date completed-orders date
-                                                      (fn [x] (= x 2)))
-                               ;; cumulatively ordered three or more times
-                               (users-ordered-to-date completed-orders date
-                                                      (fn [x] (>= x 3)))
-                               ])))
-                     dates))))))
-  (memo-clear! get-first-order-by-user-memoized))
+                                ;; cumulatively ordered once
+                                (users-ordered-to-date completed-orders date
+                                                       (fn [x] (= x 1)))
+                                ;; cumulatively ordered twice
+                                (users-ordered-to-date completed-orders date
+                                                       (fn [x] (= x 2)))
+                                ;; cumulatively ordered three or more times
+                                (users-ordered-to-date completed-orders date
+                                                       (fn [x] (>= x 3)))
+                                ])))
+                      dates)))
+        wb (spreadsheet/create-workbook "Stats" data-vectors)
+        _ (spreadsheet/save-workbook! "stats.xlsx" wb)
+        ]
+    (memo-clear! get-first-order-by-user-memoized)))
 
 (defn raw-sql-query
   "Given a raw query-vec, return the results"
@@ -258,28 +259,33 @@
 (defn transpose-dates
   "Given a vector of maps of the form
   [{:name <name>
-    :date <date>
-    :count <count>},
+    :datetime <date>
+    <keyword> <value>},
     ...]
 
   Return a vector of vectors of the form
   [[\"dates\" date_1 ... date_i]
-   [:name_1 date_count_1 ... date_count_i]
+   [:name_1 date_value_1 ... date_value_i]
    ...
-   [:name_i date_count_1 ... date_count_i]
+   [:name_i date_value_1 ... date_value_i]
 
-  date_count_i is 0 when the corresponding vector for that date does not exist,
+  date_value_i is 0 when the corresponding vector for that date does not exist,
   assuming all dates are represented in the maps. If a date is not present in
   the maps, it will not be included in the output."
   [date-count-vec]
   (let [dates (->> date-count-vec
-                   (map :date)
-                   distinct)
+                   (map :datetime)
+                   distinct
+                   sort)
         names (->> date-count-vec
                    (map :name)
-                   distinct)
+                   distinct
+                   sort)
+        this-keyword (first (difference (set (keys
+                                              (first date-count-vec)))
+                                        #{:name :datetime}))
         count-for-date (fn [date maps]
-                         (first (filter #(= date (:date %))
+                         (first (filter #(= date (:datetime %))
                                         maps)))
         name-count (fn [name-val dates]
                      (let [name-maps
@@ -287,7 +293,7 @@
                                    date-count-vec)
                            name-counts
                            (map #(if-let [order-count
-                                          (:count
+                                          (this-keyword
                                            (count-for-date % name-maps))]
                                    order-count
                                    0) dates)]
@@ -323,6 +329,48 @@
     "weekly" "%Y-%U"
     "monthly" "%Y-%m"
     "%Y-%m-%d"))
+
+(defn timeframe->format
+  "Given a timeframe, return a corresponding parser."
+  [timeframe]
+  (condp = timeframe
+    "hourly" "yyyy-MM-dd HH"
+    "daily" "yyyy-MM-dd"
+    "weekly" "yyyy-ww"
+    "monthly" "yyyy-MM"))
+
+(defn timeframe->timestep
+  "Given a timeframe, return a corresponding timestep."
+  [timeframe]
+  (condp = timeframe
+    "hourly" (time/hours 1)
+    "daily" (time/days 1)
+    "weekly" (time/weeks 1)
+    "monthly" (time/months 1)))
+
+;; time-range from http://www.rkn.io/2014/02/13/clojure-cookbook-date-ranges/
+;; author: Ryan Neufeld
+(defn time-range
+  "Return a lazy sequence of DateTime's from start to end, incremented
+  by 'step' units of time."
+  [start end step]
+  (let [inf-range (periodic/periodic-seq start step)
+        below-end? (fn [t] (time/within? (time/interval start end)
+                                         t))]
+    (take-while below-end? inf-range)))
+
+(defn time-range-using-timeframe
+  "Given start, end and timeframe, create a range of dates inclusive of
+  end"
+  [start end timeframe]
+  (let [start-time (time-coerce/from-string (str start " 00:00:00"))
+        end-time (time-coerce/from-string (str  end " 23:59:59"))
+        ranges (time-range start-time
+                           end-time
+                           (timeframe->timestep timeframe))
+        parser (partial time-format/unparse (time-format/formatter
+                                             (timeframe->format timeframe)))]
+    (map parser ranges)))
 
 (defn get-event-within-time-range
   "Return a MySQL string for retrieving event in event-log-name that occurs
@@ -740,8 +788,8 @@
          "fleet_deliveries.vin as `vin`, "
          "fleet_deliveries.license_plate as `plate-or-stock-no`, "
          "fleet_deliveries.gallons as `gallons`, "
-         "FORMAT(fleet_deliveries.gas_price / 100, 2) as `gas-price`, "
-         "FORMAT((fleet_deliveries.gas_price / 100) * fleet_deliveries.gallons, 2) as `total-price`, "
+         "ROUND(fleet_deliveries.gas_price / 100, 2) as `gas-price`, "
+         "ROUND((fleet_deliveries.gas_price / 100) * fleet_deliveries.gallons, 2) as `total-price`, "
          "fleet_deliveries.gas_type as `Octane`, if(fleet_deliveries.is_top_tier, 'yes', 'no') as `top-tier?` "
          "FROM `fleet_deliveries` "
          "LEFT JOIN fleet_accounts ON fleet_deliveries.account_id = fleet_accounts.id "
@@ -753,7 +801,7 @@
          "ORDER BY fleet_accounts.name ASC, fleet_deliveries.timestamp_created ASC;"
          )))
 
-(defn fleets-invoice
+(defn generate-fleet-accounts-xlsx
   [{:keys [from-date to-date timezone db-conn]}]
   (let [from-date (str from-date " 00:00:00")
         to-date (str to-date " 23:59:59")
@@ -767,7 +815,10 @@
     ;; make sure there wasn't an error retrieving vins
     (if (:success get-info-batch-result)
       ;; generate reports
-      (let [vins-info (:resp get-info-batch-result)
+      (let [_ (println {:from-date from-date
+                        :to-date to-date
+                        :timezone timezone})
+            vins-info (:resp get-info-batch-result)
             fleet-result-vins-info (join vins-info fleet-result)
             grouped-set            (group-by :account-name
                                              fleet-result-vins-info)
@@ -798,20 +849,24 @@
                                          (:gallons %)
                                          (:gas-price %)
                                          (:total-price %))
-                                (sort-by :timestamp fleet-account-deliveries))))
-            report-csv (fn [fleet-account-deliveries]
-                         (write-csv (vec-of-vec-elements->str
-                                     (report-vecs fleet-account-deliveries))))
-            account-name-report-csv-map (fmap report-csv grouped-set)
-            account-name-report-csv-strings (map
-                                             #(str (first %) "\n"
-                                                   (second %))
-                                             (into '()
-                                                   account-name-report-csv-map))
-            account-name-report-csv (s/join "\n"
-                                            account-name-report-csv-strings)]
-        {:data account-name-report-csv
-         :success true})
+                                (->> fleet-account-deliveries
+                                     (sort-by :timestamp)))))
+            report-vectors (fn [fleet-account-deliveries]
+                             (into [] (report-vecs fleet-account-deliveries)))
+            account-name-report-vector-map (fmap report-vectors grouped-set)
+            account-name-report-vectors (into
+                                         []
+                                         (apply
+                                          concat
+                                          (map #(into []
+                                                      (cons (vector (first %))
+                                                            (second %)))
+                                               account-name-report-vector-map)))
+            wb (spreadsheet/create-workbook "Fleet Accounts"
+                                            account-name-report-vectors)
+            _ (spreadsheet/save-workbook! "fleet-accounts.xlsx" wb)
+            ]
+        {:success true})
       ;; error
       {:data "Error"
        :success false})))
@@ -837,9 +892,9 @@
        "orders.license_plate AS `plate-or-stock-no`, "
        "orders.gallons AS `gallons`, "
        "orders.gallons - orders.referral_gallons_used AS `gallons-charged`, "
-       "FORMAT(orders.gas_price / 100, 2) AS `gas-price`, "
-       "FORMAT(orders.service_fee / 100, 2) AS `service-fee`, "
-       "FORMAT(orders.total_price / 100, 2) AS `total-price`, "
+       "ROUND(orders.gas_price / 100, 2) AS `gas-price`, "
+       "ROUND(orders.service_fee / 100, 2) AS `service-fee`, "
+       "ROUND(orders.total_price / 100, 2) AS `total-price`, "
        "orders.gas_type AS `Octane`, "
        "IF(orders.is_top_tier, 'yes', 'no') AS `top-tier?`, "
        "IF(orders.tire_pressure_check, 'yes', 'no') AS `tire-pressure-check?` "
@@ -857,7 +912,7 @@
        ))
 
 ;; add service-fee and tire pressure check (yes/no)
-(defn managed-accounts-invoice
+(defn generate-managed-accounts-xlsx
   [{:keys [from-date to-date timezone db-conn]}]
   (let [from-date (str from-date " 00:00:00")
         to-date (str to-date " 23:59:59")
@@ -882,7 +937,7 @@
                           "Plate Number"
                           "Octane"
                           "Top Tier?"
-                          "Tire Pressure Fillup?"
+                          "Tire Fillup?"
                           "Gallons"
                           "Gallon Price"
                           "Service Fee"
@@ -902,20 +957,24 @@
                                        (:gas-price %)
                                        (:service-fee %)
                                        (:total-price %))
-                              (sort-by :manager-email managed-account-orders))))
-          report-csv (fn [managed-account-orders]
-                       (write-csv (vec-of-vec-elements->str
-                                   (report-vecs managed-account-orders))))
-          account-name-report-csv-map (fmap report-csv grouped-set)
-          account-name-report-csv-strings (map
-                                           #(str (first %) "\n"
-                                                 (second %))
-                                           (into '()
-                                                 account-name-report-csv-map))
-          account-name-report-csv (s/join "\n"
-                                          account-name-report-csv-strings)]
-      {:data account-name-report-csv
-       :success true})))
+                              (->> managed-account-orders
+                                   (sort-by :timestamp)))))
+          report-vectors (fn [managed-account-orders]
+                           (into [] (report-vecs managed-account-orders)))
+          account-name-report-vector-map (fmap report-vectors grouped-set)
+          account-name-report-vectors (into
+                                       []
+                                       (apply
+                                        concat
+                                        (map #(into []
+                                                    (cons (vector (first %))
+                                                          (second %)))
+                                             account-name-report-vector-map)))
+          wb (spreadsheet/create-workbook "Managed Accounts"
+                                          account-name-report-vectors)
+          _ (spreadsheet/save-workbook! "managed-accounts.xlsx" wb)
+          ]
+      {:success true})))
 
 (defn get-by-index
   "Get an el from coll whose k is equal to v. Returns nil if el doesn't exist"
@@ -954,6 +1013,38 @@
                                                 not-index v)) vs))))]
     (into [] (map (partial insert-val all-index-vals) sets-vector))))
 
+(defn insert-value-when-missing-datetime
+  "Given a set of maps of count 3 of the format
+  {:name <name-val>
+   :datetime <datetime-val>
+   :<key> <key-val>}
+
+  and list of dates in string format, generate a set of maps where a new hashmap
+  is inserted for each :name who is missing <datetime-val> with key-val of the
+  form:
+  {:name <name-val>
+   :datetime <missing-datetime-val>
+   :<key> key-val
+  }"
+  [map-set dates data-val]
+  (let [data-key (first (difference (set (keys
+                                          (first map-set)))
+                                    #{:name :datetime}))
+        name-group (group-by :name map-set)
+        first-test (first name-group)
+        data-generator (fn [group]
+                         (concat
+                          (map (partial hash-map
+                                        :name (first group)
+                                        data-key data-val
+                                        :datetime)
+                               (difference (set dates)
+                                           (set (map :datetime
+                                                     (second group)))))
+                          (second group)))]
+    (apply concat (map data-generator name-group))
+    ))
+
 (defn map-val-to-new-key
   "Given a set of maps, map a two argument f to k1 and k2 and merge the result
   as the value to new-key. Assumes all maps have k1 and k2, throws error
@@ -967,34 +1058,38 @@
       (into #{} (map merge-fn coll)))
     (throw (Exception. "k1 and k2 do not both exist in every map of coll."))))
 
-(defn report-for-totals-set
-  "Generate raw set for reports of totals on orders and fleet-deliveries"
+(defn generate-totals-xlsx
+  "Generate a xlsx spreadsheet for reports of totals of orders and
+  fleet-deliveries as a side effect."
   [{:keys [db-conn from-date to-date timezone timeframe]}]
   (let [base-request-map {:from-date from-date
                           :to-date to-date
                           :timezone timezone
                           :timeformat (timeframe->timeformat timeframe)}
-        get-query (fn [query-type query-map rename-map]
+        get-query (fn [query-fn query-map rename-map]
                     (let [response (total-for-select-response
                                     db-conn
-                                    ((resolve (symbol query-type)) query-map)
+                                    (query-fn query-map)
                                     "set")]
                       (if-not (empty? response)
                         (rename response rename-map)
                         (rename #{{:datetime (:from-date query-map)
                                    :y 0}}
                                 rename-map))))
-        formatted-adder #(read-string (format "%.2f" (+ %1 %2)))
+        formatted-adder #(read-string (format "%.2f" (+ (double %1)
+                                                        (double %2))))
+        ;; erase file
+        _ (spit "totals.xlsx" "")
         ;; --- orders
         app-orders (get-query
-                    "totals-query"
+                    totals-query
                     (merge
                      base-request-map
                      {:select-statement
                       "COUNT(DISTINCT id) as `orders`"})
                     {:y :app-orders})
         fleet-orders  (get-query
-                       "totals-query-fleet-deliveries"
+                       totals-query-fleet-deliveries
                        (merge
                         base-request-map
                         {:select-statement
@@ -1002,7 +1097,7 @@
                        {:y :fleet-orders})
         ;; --- cancelled orders
         cancelled-orders (get-query
-                          "totals-query"
+                          totals-query
                           (merge
                            base-request-map
                            {:select-statement
@@ -1010,7 +1105,7 @@
                             :order-status "cancelled"})
                           {:y :cancelled-orders})
         cancelled-unassigned-orders (get-query
-                                     "totals-query"
+                                     totals-query
                                      (merge
                                       base-request-map
                                       {:select-statement
@@ -1021,14 +1116,14 @@
                                      {:y :cancelled-unassigned-orders})
         ;; --- gallons
         app-user-gallons (get-query
-                          "totals-query"
+                          totals-query
                           (merge
                            base-request-map
                            {:select-statement
                             "SUM(`gallons`) as `gallons`"})
                           {:y :app-user-gallons})
         app-user-87-gallons (get-query
-                             "totals-query"
+                             totals-query
                              (merge
                               base-request-map
                               {:select-statement
@@ -1036,7 +1131,7 @@
                                :where-clause "AND `gas_type` = '87'"})
                              {:y :app-user-87-gallons})
         app-user-91-gallons (get-query
-                             "totals-query"
+                             totals-query
                              (merge
                               base-request-map
                               {:select-statement
@@ -1044,14 +1139,14 @@
                                :where-clause "AND `gas_type` = '91'"})
                              {:y :app-user-91-gallons})
         fleet-gallons (get-query
-                       "totals-query-fleet-deliveries"
+                       totals-query-fleet-deliveries
                        (merge
                         base-request-map
                         {:select-statement
                          "SUM(`gallons`) as `gallons`"})
                        {:y :fleet-gallons})
         fleet-87-gallons (get-query
-                          "totals-query-fleet-deliveries"
+                          totals-query-fleet-deliveries
                           (merge
                            base-request-map
                            {:select-statement
@@ -1059,7 +1154,7 @@
                             :where-clause "AND `gas_type` = '87'"})
                           {:y :fleet-87-gallons})
         fleet-91-gallons (get-query
-                          "totals-query-fleet-deliveries"
+                          totals-query-fleet-deliveries
                           (merge
                            base-request-map
                            {:select-statement
@@ -1068,7 +1163,7 @@
                           {:y :fleet-91-gallons})
         ;; --- revenue
         app-user-revenue (get-query
-                          "totals-query"
+                          totals-query
                           (merge
                            base-request-map
                            {:select-statement
@@ -1076,7 +1171,7 @@
                           {:y :app-user-revenue})
         app-user-service-fees-revenue
         (get-query
-         "totals-query"
+         totals-query
          (merge
           base-request-map
           {:select-statement
@@ -1084,7 +1179,7 @@
          {:y :app-user-service-fees-revenue})
         app-user-fuel-revenue
         (get-query
-         "totals-query"
+         totals-query
          (merge
           base-request-map
           {:select-statement
@@ -1093,7 +1188,7 @@
         ;; --- costs
         referral-gallons-cost
         (get-query
-         "totals-query"
+         totals-query
          (merge
           base-request-map
           {:select-statement
@@ -1101,13 +1196,15 @@
          {:y :referral-gallons-cost})
         coupons-cost
         (get-query
-         "totals-query"
+         totals-query
          (merge
           base-request-map
           {:select-statement
            "ROUND(abs(sum(service_fee + (gas_price * (gallons - referral_gallons_used) - total_price))/100),2) as `coupon_value`"
            :where-clause "AND `user_id` NOT IN ('evU83hVPIbccvZE0C2uL','nszMr7cDRfRrbTksXaEC','k4KTi1xmes8LLd9ZZhsH')"})
          {:y :coupons-cost})
+        ;; note: insert-value-when-missing-index-map should be replaced
+        ;; with a call to insert-value-when-missing-datetime
         report-map (insert-value-when-missing-index-map
                     [app-orders
                      fleet-orders
@@ -1189,46 +1286,24 @@
                           (sort-by first)
                           (cons header-col)
                           (into [])
-                          (mat/transpose)
-                          )]
-    data-vectors))
+                          (mat/transpose))
+        wb (spreadsheet/create-workbook "Total" data-vectors)
+        _ (spreadsheet/save-workbook! "totals.xlsx" wb)
+        ]
+    {:success true}))
 
-(defn vectors->spreadsheet
-  "Given a vector of vectors, generate a spreadsheet of kind where
-  kind is csv or xlsx"
-  [vectors kind]
-  (condp = kind
-    "csv"
-    (->> vectors
-         (vec-of-vec-elements->str)
-         (write-csv))
-    "xlsx"
-    ;; this is a hack, this would obviously need to be streamed
-    (let [wb (spreadsheet/create-workbook "Totals" vectors)]
-      (spreadsheet/save-workbook-into-file! "spreadsheet.xlsx" wb))))
-
-;; fn from http://www.rkn.io/2014/02/13/clojure-cookbook-date-ranges/
-(defn time-range
-  "Return a lazy sequence of DateTime's from start to end, incremented
-  by 'step' units of time."
-  [start end step]
-  (let [inf-range (periodic/periodic-seq start step)
-        below-end? (fn [t] (time/within? (time/interval start end)
-                                         t))]
-    (take-while below-end? inf-range)))
-
-
-(defn report-for-couriers-set
-  "Generate raw set for reports of couriers on orders and fleet-deliveries"
+(defn generate-couriers-totals-xlsx
+  "Generate a xlsx spreadsheet for reports of couriers on orders and
+  fleet-deliveries as a side effect."
   [{:keys [db-conn from-date to-date timezone timeframe]}]
   (let [base-request-map {:from-date from-date
                           :to-date to-date
                           :timezone timezone
                           :timeformat (timeframe->timeformat timeframe)}
-        get-query (fn [query-type query-map rename-map]
+        get-query (fn [query-fn query-map rename-map]
                     (let [response (per-courier-response
                                     db-conn
-                                    ((resolve (symbol query-type)) query-map)
+                                    (query-fn query-map)
                                     "set")]
                       (if-not (empty? response)
                         (rename response rename-map)
@@ -1238,14 +1313,14 @@
         formatted-adder #(read-string (format "%.2f" (+ %1 %2)))
         ;; --- orders
         app-orders (get-query
-                    "per-courier-query"
+                    per-courier-query
                     (merge
                      base-request-map
                      {:select-statement
                       "COUNT(0) AS `count`"})
                     {:y :app-orders})
         fleet-orders  (get-query
-                       "per-courier-query-fleet-deliveries"
+                       per-courier-query-fleet-deliveries
                        (merge
                         base-request-map
                         {:select-statement
@@ -1253,7 +1328,7 @@
                        {:y :fleet-orders})
         ;; --- cancelled orders
         cancelled-orders (get-query
-                          "per-courier-query"
+                          per-courier-query
                           (merge
                            base-request-map
                            {:select-statement
@@ -1264,14 +1339,14 @@
                           {:y :cancelled-orders})
         ;; --- gallons
         app-user-gallons (get-query
-                          "per-courier-query"
+                          per-courier-query
                           (merge
                            base-request-map
                            {:select-statement
                             "SUM(`gallons`) as `gallons`"})
                           {:y :app-user-gallons})
         app-user-87-gallons (get-query
-                             "per-courier-query"
+                             per-courier-query
                              (merge
                               base-request-map
                               {:select-statement
@@ -1279,7 +1354,7 @@
                                :where-clause "AND `gas_type` = '87'"})
                              {:y :app-user-87-gallons})
         app-user-91-gallons (get-query
-                             "per-courier-query"
+                             per-courier-query
                              (merge
                               base-request-map
                               {:select-statement
@@ -1287,14 +1362,14 @@
                                :where-clause "AND `gas_type` = '91'"})
                              {:y :app-user-91-gallons})
         fleet-gallons (get-query
-                       "per-courier-query-fleet-deliveries"
+                       per-courier-query-fleet-deliveries
                        (merge
                         base-request-map
                         {:select-statement
                          "SUM(`gallons`) as `gallons`"})
                        {:y :fleet-gallons})
         fleet-87-gallons (get-query
-                          "per-courier-query-fleet-deliveries"
+                          per-courier-query-fleet-deliveries
                           (merge
                            base-request-map
                            {:select-statement
@@ -1302,7 +1377,7 @@
                             :where-clause "AND `gas_type` = '87'"})
                           {:y :fleet-87-gallons})
         fleet-91-gallons (get-query
-                          "per-courier-query-fleet-deliveries"
+                          per-courier-query-fleet-deliveries
                           (merge
                            base-request-map
                            {:select-statement
@@ -1311,7 +1386,7 @@
                           {:y :fleet-91-gallons})
         ;; --- revenue
         app-user-revenue (get-query
-                          "per-courier-query"
+                          per-courier-query
                           (merge
                            base-request-map
                            {:select-statement
@@ -1319,7 +1394,7 @@
                           {:y :app-user-revenue})
         app-user-service-fees-revenue
         (get-query
-         "per-courier-query"
+         per-courier-query
          (merge
           base-request-map
           {:select-statement
@@ -1327,114 +1402,55 @@
          {:y :app-user-service-fees-revenue})
         app-user-fuel-revenue
         (get-query
-         "per-courier-query"
+         per-courier-query
          (merge
           base-request-map
           {:select-statement
            "ROUND(SUM((`gallons` - `referral_gallons_used`) * `gas_price`) / 100,2) as `fuel_price`"})
          {:y :app-user-fuel-revenue})
-        ;; --- costs
-        referral-gallons-cost
-        (get-query
-         "per-courier-query"
-         (merge
-          base-request-map
-          {:select-statement
-           "ROUND(SUM(`referral_gallons_used` * `gas_price`) / 100,2) AS `count`"})
-         {:y :referral-gallons-cost})
-        coupons-cost
-        (get-query
-         "per-courier-query"
-         (merge
-          base-request-map
-          {:select-statement
-           "ROUND(abs(sum(service_fee + (gas_price * (gallons - referral_gallons_used) - total_price))/100),2) as `coupon_value`"
-           :where-clause "AND `user_id` NOT IN ('evU83hVPIbccvZE0C2uL','nszMr7cDRfRrbTksXaEC','k4KTi1xmes8LLd9ZZhsH')"})
-         {:y :coupons-cost})
-        report-map (insert-value-when-missing-index-map
-                    [app-orders
-                     fleet-orders
-                     cancelled-orders
-                     app-user-gallons
-                     app-user-87-gallons
-                     app-user-91-gallons
-                     fleet-gallons
-                     fleet-87-gallons
-                     fleet-91-gallons
-                     app-user-revenue
-                     app-user-service-fees-revenue
-                     app-user-fuel-revenue
-                     referral-gallons-cost
-                     coupons-cost]
-                    :datetime 0)
-        report-set (reduce join report-map)
-        ;; total-orders (map-val-to-new-key
-        ;;               report-set
-        ;;               +
-        ;;               :app-orders
-        ;;               :fleet-orders
-        ;;               :total-orders)
-        ;; total-gallons-sold (map-val-to-new-key
-        ;;                     report-set
-        ;;                     +
-        ;;                     :app-user-gallons
-        ;;                     :fleet-gallons
-        ;;                     :total-gallons-sold)
-        ;; total-costs (map-val-to-new-key
-        ;;              report-set
-        ;;              formatted-adder
-        ;;              :referral-gallons-cost
-        ;;              :coupons-cost
-        ;;              :total-costs)
-        ;; final-set (reduce join [total-orders
-        ;;                         total-gallons-sold
-        ;;                         total-costs])
-        ;; header-col  ["Report"
-        ;;              "Total Orders Completed"
-        ;;              "App Users Orders"
-        ;;              "Fleet Orders"
-        ;;              "App Users Cancelled Orders"
-        ;;              "App Users Cancelled Unassigned Orders"
-        ;;              "Total Gallons Sold"
-        ;;              "App Users"
-        ;;              "87"
-        ;;              "91"
-        ;;              "Fleet"
-        ;;              "87"
-        ;;              "91"
-        ;;              "App User Revenue"
-        ;;              "Service Fees"
-        ;;              "Fuel"
-        ;;              "Total Costs"
-        ;;              "Referral Gallons Cost"
-        ;;              "Coupon Cost"]
-        ;; data-vectors (->> final-set
-        ;;                   (map #(vector (:datetime %)
-        ;;                                 (:total-orders %)
-        ;;                                 (:app-orders %)
-        ;;                                 (:fleet-orders %)
-        ;;                                 (:cancelled-orders %)
-        ;;                                 (:cancelled-unassigned-orders %)
-        ;;                                 (:total-gallons-sold %)
-        ;;                                 (:app-user-gallons %)
-        ;;                                 (:app-user-87-gallons %)
-        ;;                                 (:app-user-91-gallons %)
-        ;;                                 (:fleet-gallons %)
-        ;;                                 (:fleet-87-gallons %)
-        ;;                                 (:fleet-91-gallons %)
-        ;;                                 (:app-user-revenue %)
-        ;;                                 (:app-user-service-fees-revenue %)
-        ;;                                 (:app-user-fuel-revenue %)
-        ;;                                 (:total-costs %)
-        ;;                                 (:referral-gallons-cost %)
-        ;;                                 (:coupons-cost %)))
-        ;;                   (sort-by first)
-        ;;                   (cons header-col)
-        ;;                   (into [])
-        ;;                   (mat/transpose)
-        ;;                   )
+        ;; schedule / flex orders
+        scheduled-and-total-orders (flex-orders-response
+                                    (merge base-request-map
+                                           {:db-conn db-conn
+                                            :response-type "sql-map"}))
+        flex-orders
+        (set (map #(hash-map :datetime (:date %)
+                             :flex (- (:total %) (:scheduled %))
+                             :name (:name %))
+                  scheduled-and-total-orders))
+        dates (time-range-using-timeframe from-date to-date timeframe)
+        generate-sheet (fn [data] (transpose-dates
+                                   (insert-value-when-missing-datetime
+                                    data
+                                    dates
+                                    0)))
+        wb (spreadsheet/create-workbook "Orders - App Users"
+                                        (generate-sheet app-orders)
+                                        "Orders - Fleet"
+                                        (generate-sheet fleet-orders)
+                                        "Cancelled Orders - App Users"
+                                        (generate-sheet cancelled-orders)
+                                        "Gallons Sold - App Users"
+                                        (generate-sheet app-user-gallons)
+                                        "Gallons 87 Sold - App Users"
+                                        (generate-sheet app-user-87-gallons)
+                                        "Gallons 91 Sold - App Users"
+                                        (generate-sheet app-user-91-gallons)
+                                        "Gallons Sold - Fleet"
+                                        (generate-sheet fleet-gallons)
+                                        "Gallons 87 Sold - Fleet"
+                                        (generate-sheet fleet-87-gallons)
+                                        "Gallons 91 Sold - Fleet"
+                                        (generate-sheet fleet-91-gallons)
+                                        "Total Revenue - App Users"
+                                        (generate-sheet app-user-revenue)
+                                        "Service Fees - App Users"
+                                        (generate-sheet
+                                         app-user-service-fees-revenue)
+                                        "Fuel Revenue - App Users"
+                                        (generate-sheet app-user-fuel-revenue)
+                                        "Flex Orders"
+                                        (generate-sheet flex-orders))
+        _ (spreadsheet/save-workbook! "couriers-totals.xlsx" wb)
         ]
-    ;;data-vectors
-    ;;report-set
-    report-map
-    ))
+    {:success true}))

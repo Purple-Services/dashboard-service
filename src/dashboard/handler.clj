@@ -214,89 +214,17 @@
     :method "POST"
     :permissions ["view-orders"]}
    ;;!! analytics
-   {:uri "/status-stats-csv"
-    :method "GET"
-    :permissions ["download-stats"]}
-   {:uri "/generate-stats-csv"
-    :method "GET"
-    :permissions ["download-stats"]}
-   {:uri "/download-stats-csv"
-    :method "GET"
-    :permissions ["download-stats"]}
    {:uri "/total-orders-customer"
+    :method "GET"
+    :permissions ["download-stats"]}
+   {:uri "/status-file/:filename"
+    :method "GET"
+    :permissions ["download-stats"]}
+   {:uri "/generate-file/:filename"
     :method "POST"
     :permissions ["download-stats"]}
-   {:uri "/total-orders-fleet"
-    :method "POST"
-    :permissions ["download-stats"]}
-   {:uri "/total-cancelled-orders"
-    :method "POST"
-    :permissions ["download-stats"]}
-   {:uri "/cancelled-unassigned-orders"
-    :method "POST"
-    :permissions ["download-stats"]}
-   {:uri "/orders-per-courier"
-    :method "POST"
-    :permissions ["download-stats"]}
-   {:uri "/canelled-orders-per-courier"
-    :method "POST"
-    :permissions ["download-stats"]}
-   {:uri "/scheduled-orders-per-courier"
-    :method "POST"
-    :permissions ["download-stats"]}
-   {:uri "/flex-orders-per-courier"
-    :method "POST"
-    :permissions ["download-stats"]}
-   {:uri "/total-gallons-customer"
-    :method "POST"
-    :permissions ["download-stats"]}
-   {:uri "/total-gallons-fleet"
-    :method "POST"
-    :permissions ["download-stats"]}
-   {:uri "/total-87-gallons"
-    :method "POST"
-    :permissions ["download-stats"]}
-   {:uri "/total-91-gallons"
-    :method "POST"
-    :permissions ["download-stats"]}
-   {:uri "/gallons-per-courier"
-    :method "POST"
-    :permissions ["download-stats"]}
-   {:uri "/gallons-87-per-courier"
-    :method "POST"
-    :permissions ["download-stats"]}
-   {:uri "/gallons-91-per-courier"
-    :method "POST"
-    :permissions ["download-stats"]}
-   {:uri "/total-revenue"
-    :method "POST"
-    :permissions ["download-stats"]}
-   {:uri "/revenue-per-courier"
-    :method "POST"
-    :permissions ["download-stats"]}
-   {:uri "/fuel-price"
-    :method "POST"
-    :permissions ["download-stats"]}
-   {:uri "/fuel-price-per-courier"
-    :method "POST"
-    :permissions ["download-stats"]}
-   {:uri "/service-fees-per-courier"
-    :method "POST"
-    :permissions ["download-stats"]}
-   {:uri "/referral-gallons-cost"
-    :method "POST"
-    :permissions ["download-stats"]}
-   {:uri "/referral-gallons-cost-per-courier"
-    :method "POST"
-    :permissions ["download-stats"]}
-   {:uri "/coupon-cost"
-    :method "POST"
-    :permissions ["download-stats"]}
-   {:uri "/fleets-invoice"
-    :method "POST"
-    :permissions ["download-stats"]}
-   {:uri "/managed-accounts-invoice"
-    :method "POST"
+   {:uri "/download-file/:filename"
+    :method "GET"
     :permissions ["download-stats"]}
    ;;!! Marketing
    {:uri "/send-push-to-table-view"
@@ -611,34 +539,6 @@
                               (:date b)
                               (:unix-epoch? b)))))
   ;;!! analytics
-  (GET "/status-stats-csv" []
-       (response
-        (let [stats-file (java.io.File. "stats.csv")]
-          (cond
-            ;; stats file doesn't exist
-            (not (.exists stats-file))
-            {:status "non-existent"}
-            ;; stats file exists, but processing
-            (= (.length stats-file) 0)
-            {:status "processing"}
-            ;; stats file exists, not processing
-            (> (.length stats-file) 0)
-            {:status "ready"
-             :timestamp (quot (.lastModified stats-file)
-                              1000)}
-            ;; unknown error
-            :else {:status "unknown error"}))))
-  ;; generate analytics file
-  (GET "/generate-stats-csv" []
-       (do (future (analytics/gen-stats-csv))
-           (response {:success true})))
-  (GET "/download-stats-csv" []
-       (-> (response (java.io.File. "stats.csv"))
-           (header "Content-Type:"
-                   "text/csv; name=\"stats.csv\"")
-           (header "Content-Disposition"
-                   "attachment; filename=\"stats.csv\"")))
-  ;; orders count
   (POST "/total-orders-customer" {body :body}
         (response (let [b (keywordize-keys body)
                         {:keys [timezone timeframe response-type from-date
@@ -654,364 +554,94 @@
                        :timeformat (analytics/timeframe->timeformat
                                     timeframe)})
                      response-type))))
-  (POST "/total-orders-fleet" {body :body}
+  (GET "/status-file/:filename" [filename]
+       (response (let [status-file (java.io.File. filename)]
+                   (cond
+                     ;; stats file doesn't exist
+                     (not (.exists status-file))
+                     {:status "non-existent"}
+                     ;; stats file exists, but processing
+                     (= (.length status-file) 0)
+                     {:status "processing"}
+                     ;; stats file exists, not processing
+                     (> (.length status-file) 0)
+                     {:status "ready"
+                      :timestamp (quot (.lastModified status-file)
+                                       1000)}
+                     ;; unknown error
+                     :else {:status "unknown error"}))))
+  (POST "/generate-file/:filename" {{filename :filename} :params
+                                    body :body}
         (response (let [b (keywordize-keys body)
-                        {:keys [timezone timeframe response-type from-date
-                                to-date]} b]
-                    (analytics/total-for-select-response
-                     (conn)
-                     (analytics/totals-query-fleet-deliveries
-                      {:select-statement
-                       "COUNT(DISTINCT id) as `orders`"
-                       :from-date from-date
-                       :to-date to-date
-                       :timezone timezone
-                       :timeformat (analytics/timeframe->timeformat
-                                    timeframe)})
-                     response-type))))
-  ;; cancelled orders
-  (POST "/total-cancelled-orders" {body :body}
-        (response (let [b (keywordize-keys body)
-                        {:keys [timezone timeframe response-type from-date
-                                to-date]} b]
-                    (analytics/total-for-select-response
-                     (conn)
-                     (analytics/totals-query
-                      {:select-statement
-                       "COUNT(DISTINCT id) as `orders`"
-                       :from-date from-date
-                       :to-date to-date
-                       :order-status "cancelled"
-                       :timezone timezone
-                       :timeformat (analytics/timeframe->timeformat
-                                    timeframe)})
-                     response-type))))
-  (POST "/cancelled-unassigned-orders" {body :body}
-        (response (let [b (keywordize-keys body)
-                        {:keys [timezone timeframe response-type from-date
-                                to-date]} b]
-                    (analytics/total-for-select-response
-                     (conn)
-                     (analytics/totals-query
-                      {:select-statement
-                       "COUNT(DISTINCT id) as `orders`"
-                       :where-clause "AND `orders`.`courier_id` = ''"
-                       :from-date from-date
-                       :to-date to-date
-                       :order-status "cancelled"
-                       :timezone timezone
-                       :timeformat (analytics/timeframe->timeformat
-                                    timeframe)})
-                     response-type))))
-  ;; per courier orders
-  (POST "/orders-per-courier" {body :body}
-        (response (let [b (keywordize-keys body)
-                        {:keys [timeframe timezone response-type
-                                from-date to-date]} b]
-                    (analytics/per-courier-response
-                     (conn)
-                     (analytics/per-courier-query
-                      {:select-statement "count(0) AS `count`"
-                       :from-date from-date
-                       :to-date to-date
-                       :timezone timezone
-                       :timeformat (analytics/timeframe->timeformat
-                                    timeframe)})
-                     response-type))))
-  (POST "/cancelled-orders-per-courier" {body :body}
-        (response (let [b (keywordize-keys body)
-                        {:keys [timeframe timezone response-type
-                                from-date to-date]} b]
-                    (analytics/per-courier-response
-                     (conn)
-                     (analytics/per-courier-query
-                      {:select-statement "count(0) AS `count`"
-                       :from-date from-date
-                       :to-date to-date
-                       :order-status "cancelled"
-                       :where-clause "AND `orders`.`courier_id` != ''"
-                       :timezone timezone
-                       :timeformat (analytics/timeframe->timeformat
-                                    timeframe)
-                       })
-                     response-type))))
-  (POST "/scheduled-orders-per-courier" {body :body}
-        (response (let [b (keywordize-keys body)
-                        {:keys [timeframe timezone response-type
-                                from-date to-date]} b]
-                    (analytics/scheduled-orders-response
-                     {:from-date from-date
-                      :to-date to-date
-                      :timezone timezone
-                      :timeformat (analytics/timeframe->timeformat
-                                   timeframe)
-                      :db-conn (conn)
-                      :response-type "csv"}))))
-  (POST "/flex-orders-per-courier" {body :body}
-        (response (let [b (keywordize-keys body)
-                        {:keys [timeframe timezone response-type
-                                from-date to-date]} b]
-                    (analytics/flex-orders-response
-                     {:from-date from-date
-                      :to-date to-date
-                      :timezone timezone
-                      :timeformat (analytics/timeframe->timeformat
-                                   timeframe)
-                      :db-conn (conn)
-                      :response-type "csv"}))))
-  ;; total gallons count
-  (POST "/total-gallons-customer" {body :body}
-        (response (let [b (keywordize-keys body)
-                        {:keys [timezone timeframe response-type from-date
-                                to-date]} b]
-                    (analytics/total-for-select-response
-                     (conn)
-                     (analytics/totals-query
-                      {:select-statement "SUM(`gallons`) as `gallons`"
-                       :from-date from-date
-                       :to-date to-date
-                       :timezone timezone
-                       :timeformat (analytics/timeframe->timeformat
-                                    timeframe)})
-                     response-type))))
-  (POST "/total-gallons-fleet" {body :body}
-        (response (let [b (keywordize-keys body)
-                        {:keys [timezone timeframe response-type from-date
-                                to-date]} b]
-                    (analytics/total-for-select-response
-                     (conn)
-                     (analytics/totals-query-fleet-deliveries
-                      {:select-statement "SUM(`gallons`) as `gallons`"
-                       :from-date from-date
-                       :to-date to-date
-                       :timezone timezone
-                       :timeformat (analytics/timeframe->timeformat
-                                    timeframe)})
-                     response-type))))
-  (POST "/total-87-gallons" {body :body}
-        (response (let [b (keywordize-keys body)
-                        {:keys [timezone timeframe response-type from-date
-                                to-date]} b]
-                    (analytics/total-for-select-response
-                     (conn)
-                     (analytics/totals-query
-                      {:select-statement "SUM(`gallons`) as `gallons`"
-                       :from-date from-date
-                       :to-date to-date
-                       :timezone timezone
-                       :where-clause "AND `gas_type` = '87'"
-                       :timeformat (analytics/timeframe->timeformat
-                                    timeframe)})
-                     response-type))))
-  (POST "/total-91-gallons" {body :body}
-        (response (let [b (keywordize-keys body)
-                        {:keys [timezone timeframe response-type from-date
-                                to-date]} b]
-                    (analytics/total-for-select-response
-                     (conn)
-                     (analytics/totals-query
-                      {:select-statement "SUM(`gallons`) as `gallons`"
-                       :from-date from-date
-                       :to-date to-date
-                       :timezone timezone
-                       :where-clause "AND `gas_type` = '91'"
-                       :timeformat (analytics/timeframe->timeformat
-                                    timeframe)})
-                     response-type))))
-  ;; per courier gallons count
-  (POST "/gallons-per-courier" {body :body}
-        (response (let [b (keywordize-keys body)
-                        {:keys [timeframe timezone response-type
-                                from-date to-date]} b]
-                    (analytics/per-courier-response
-                     (conn)
-                     (analytics/per-courier-query
-                      {:select-statement "SUM(`gallons`) AS `count`"
-                       :from-date from-date
-                       :to-date to-date
-                       :timezone timezone
-                       :timeformat (analytics/timeframe->timeformat
-                                    timeframe)})
-                     response-type))))
-  (POST "/gallons-87-per-courier" {body :body}
-        (response (let [b (keywordize-keys body)
-                        {:keys [timeframe timezone response-type
-                                from-date to-date]} b]
-                    (analytics/per-courier-response
-                     (conn)
-                     (analytics/per-courier-query
-                      {:select-statement "SUM(`gallons`) AS `count`"
-                       :from-date from-date
-                       :to-date to-date
-                       :timezone timezone
-                       :where-clause "AND `gas_type` = '87'"
-                       :timeformat (analytics/timeframe->timeformat
-                                    timeframe)})
-                     response-type))))
-  (POST "/gallons-91-per-courier" {body :body}
-        (response (let [b (keywordize-keys body)
-                        {:keys [timeframe timezone response-type
-                                from-date to-date]} b]
-                    (analytics/per-courier-response
-                     (conn)
-                     (analytics/per-courier-query
-                      {:select-statement "SUM(`gallons`) AS `count`"
-                       :from-date from-date
-                       :to-date to-date
-                       :timezone timezone
-                       :where-clause "AND `gas_type` = '91'"
-                       :timeformat (analytics/timeframe->timeformat
-                                    timeframe)})
-                     response-type))))
-  ;; revenue
-  (POST "/total-revenue" {body :body}
-        (response (let [b (keywordize-keys body)
-                        {:keys [timezone timeframe response-type from-date
-                                to-date]} b]
-                    (analytics/total-for-select-response
-                     (conn)
-                     (analytics/totals-query
-                      {:select-statement "FORMAT(SUM(`total_price`) / 100,2) as `price`"
-                       :from-date from-date
-                       :to-date to-date
-                       :timezone timezone
-                       :timeformat (analytics/timeframe->timeformat
-                                    timeframe)})
-                     response-type))))
-  (POST "/revenue-per-courier" {body :body}
-        (response (let [b (keywordize-keys body)
-                        {:keys [timeframe timezone response-type
-                                from-date to-date]} b]
-                    (analytics/per-courier-response
-                     (conn)
-                     (analytics/per-courier-query
-                      {:select-statement "FORMAT(SUM(`total_price`) / 100,2) AS `count`"
-                       :from-date from-date
-                       :to-date to-date
-                       :timezone timezone
-                       :timeformat (analytics/timeframe->timeformat
-                                    timeframe)})
-                     response-type))))
-  ;; Fuel Price
-  (POST "/fuel-price" {body :body}
-        (response (let [b (keywordize-keys body)
-                        {:keys [timezone timeframe response-type from-date
-                                to-date]} b]
-                    (analytics/total-for-select-response
-                     (conn)
-                     (analytics/totals-query
-                      {:select-statement "FORMAT(SUM((`gallons` - `referral_gallons_used`) * `gas_price`) / 100,2) as `fuel_price`"
-                       :from-date from-date
-                       :to-date to-date
-                       :timezone timezone
-                       :timeformat (analytics/timeframe->timeformat
-                                    timeframe)})
-                     response-type))))
-  (POST "/fuel-price-per-courier" {body :body}
-        (response (let [b (keywordize-keys body)
-                        {:keys [timeframe timezone response-type
-                                from-date to-date]} b]
-                    (analytics/per-courier-response
-                     (conn)
-                     (analytics/per-courier-query
-                      {:select-statement "FORMAT(SUM(`gallons` * `gas_price`) / 100,2) AS `count`"
-                       :from-date from-date
-                       :to-date to-date
-                       :timezone timezone
-                       :timeformat (analytics/timeframe->timeformat
-                                    timeframe)})
-                     response-type))))
-  ;; Service Fees
-  (POST "/service-fees" {body :body}
-        (response (let [b (keywordize-keys body)
-                        {:keys [timezone timeframe response-type from-date
-                                to-date]} b]
-                    (analytics/total-for-select-response
-                     (conn)
-                     (analytics/totals-query
-                      {:select-statement "FORMAT(SUM(`service_fee`) / 100,2) as `service_fee`"
-                       :from-date from-date
-                       :to-date to-date
-                       :timezone timezone
-                       :timeformat (analytics/timeframe->timeformat
-                                    timeframe)})
-                     response-type))))
-  (POST "/service-fees-per-courier" {body :body}
-        (response (let [b (keywordize-keys body)
-                        {:keys [timeframe timezone response-type
-                                from-date to-date]} b]
-                    (analytics/per-courier-response
-                     (conn)
-                     (analytics/per-courier-query
-                      {:select-statement "FORMAT(SUM(`service_fee`) / 100,2) AS `count`"
-                       :from-date from-date
-                       :to-date to-date
-                       :timezone timezone
-                       :timeformat (analytics/timeframe->timeformat
-                                    timeframe)})
-                     response-type))))
-  ;; Referral Gallon Discount
-  (POST "/referral-gallons-cost" {body :body}
-        (response (let [b (keywordize-keys body)
-                        {:keys [timezone timeframe response-type from-date
-                                to-date]} b]
-                    (analytics/total-for-select-response
-                     (conn)
-                     (analytics/totals-query
-                      {:select-statement "FORMAT(SUM(`referral_gallons_used` * `gas_price`) / 100,2) as `ref_gal_cost`"
-                       :from-date from-date
-                       :to-date to-date
-                       :timezone timezone
-                       :timeformat (analytics/timeframe->timeformat
-                                    timeframe)})
-                     response-type))))
-  (POST "/referral-gallons-cost-per-courier" {body :body}
-        (response (let [b (keywordize-keys body)
-                        {:keys [timeframe timezone response-type
-                                from-date to-date]} b]
-                    (analytics/per-courier-response
-                     (conn)
-                     (analytics/per-courier-query
-                      {:select-statement "FORMAT(SUM(`referral_gallons_used` * `gas_price`) / 100,2) AS `count`"
-                       :from-date from-date
-                       :to-date to-date
-                       :timezone timezone
-                       :timeformat (analytics/timeframe->timeformat
-                                    timeframe)})
-                     response-type))))
-  ;; Coupon Discount
-  (POST "/coupon-cost" {body :body}
-        (response (let [b (keywordize-keys body)
-                        {:keys [timezone timeframe response-type from-date
-                                to-date]} b]
-                    (analytics/total-for-select-response
-                     (conn)
-                     (analytics/totals-query
-                      {:select-statement "format(abs(sum(service_fee + (gas_price * (gallons - referral_gallons_used) - total_price))/100),2) as `coupon_value`"
-                       :from-date from-date
-                       :to-date to-date
-                       :timezone timezone
-                       :timeformat (analytics/timeframe->timeformat
-                                    timeframe)
-                       :where-clause "AND `user_id` NOT IN ('evU83hVPIbccvZE0C2uL','nszMr7cDRfRrbTksXaEC','k4KTi1xmes8LLd9ZZhsH')"})
-                     response-type))))
-  ;;!! B2B reports
-  (POST "/fleets-invoice" {body :body}
-        (response (let [b (keywordize-keys body)
-                        {:keys [timezone from-date to-date]} b]
-                    (analytics/fleets-invoice
-                     {:from-date from-date
-                      :to-date to-date
-                      :timezone timezone
-                      :db-conn (conn)}))))
-  (POST "/managed-accounts-invoice" {body :body}
-        (response (let [b (keywordize-keys body)
-                        {:keys [timezone from-date to-date]} b]
-                    (analytics/managed-accounts-invoice
-                     {:from-date from-date
-                      :to-date to-date
-                      :timezone timezone
-                      :db-conn (conn)}))))
+                        status-file (java.io.File. filename)
+                        {:keys [parameters]} b
+                        {:keys [from-date to-date
+                                timezone timeframe]} parameters
+                        generator-parameters {:from-date from-date
+                                              :to-date to-date
+                                              :timezone timezone
+                                              :timeframe timeframe
+                                              :db-conn (conn)}]
+                    (cond
+                      ;; the stats file is being generated
+                      (and (= (.length status-file) 0)
+                           (.exists status-file))
+                      (do
+                        (println "file is 0 length")
+                        {:success false
+                         :message "processing"})
+                      ;; stats file doesn't exist or has
+                      ;; non-zero value, assume file should
+                      ;; be generated
+                      (or (not (.exists status-file))
+                          (> (.length status-file) 0))
+                      (do
+                        (println "file doesn't exist is larger than 0")
+                        ;; have to touch filename so that
+                        ;; we can tell when the file is processing
+                        (spit filename "")
+                        ;; a bit hacky to use condp here, better if
+                        ;; this was dispatched on a map
+                        (condp = filename
+                          "totals.xlsx"
+                          (do
+                            (future
+                              (Thread/sleep 10000)
+                              (analytics/generate-totals-xlsx
+                               generator-parameters))
+                            {:success true})
+                          "couriers-totals.xlsx"
+                          (do (future
+                                (analytics/generate-couriers-totals-xlsx
+                                 generator-parameters))
+                              {:success true})
+                          "stats.xlsx"
+                          (do (future (analytics/generate-stats-xlsx))
+                              {:success true})
+                          "managed-accounts.xlsx"
+                          (do (future (analytics/generate-managed-accounts-xlsx
+                                       generator-parameters))
+                              {:success true})
+                          "fleet-accounts.xlsx"
+                          (do (println "got fleet-accounts.xlsx")
+                              (future (analytics/generate-fleet-accounts-xlsx
+                                       generator-parameters))
+                              {:success true})
+                          ;; unknown error
+                          :else {:success false
+                                 :message "unknown error"}))
+                      :else {:success false
+                             :message "unknown error"}))))
+  (GET "/download-file/:filename" [filename]
+       (-> (response (java.io.File. filename))
+           (header "Content-Type"
+                   (str "application/vnd.openxmlformats-officedocument."
+                        "spreadsheetml.sheet"
+                        " name=\""
+                        filename "\""))
+           (header "Content-Disposition"
+                   (str "attachment; filename=\""
+                        filename "\""))))
   ;; Monthly subscriptions
   ;;!! Marketing
   (POST "/send-push-to-table-view" {body :body}
@@ -1019,24 +649,6 @@
                     (send-push-to-table-view (conn)
                                              (:message b)
                                              (:table-view b)))))
-  (GET "/test-xlsx" []
-       (let [wb (spreadsheet/create-workbook "Price List"
-                                             [["Name" "Price"]
-                                              ["Foo Widget" 100]
-                                              ["Bar Widget" 200]
-                                              ["Total" "=B2+B3"]
-                                              ])
-             sheet (spreadsheet/select-sheet "Price List" wb)
-             header-row (first (spreadsheet/row-seq sheet))]
-         (do
-           (spreadsheet/set-row-style! header-row (spreadsheet/create-cell-style! wb {:background :yellow,
-                                                                                      :font {:bold true}}))
-           (spreadsheet/save-workbook-into-file! "spreadsheet.xlsx" wb)))
-       (-> (response (java.io.File. "spreadsheet.xlsx"))
-           (header "Content-Type:"
-                   "application/xlsx")
-           (header "Content-Disposition"
-                   "attachment; filename=\"spreadsheet.xlsx\"")))
   ;;!! search
   (POST "/search" {body :body}
         (response
