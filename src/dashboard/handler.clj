@@ -604,7 +604,6 @@
                           "totals.xlsx"
                           (do
                             (future
-                              (Thread/sleep 10000)
                               (analytics/generate-totals-xlsx
                                generator-parameters))
                             {:success true})
