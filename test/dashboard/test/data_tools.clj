@@ -204,3 +204,14 @@
     (is (= (:id vehicle)
            (:vehicle_id (first (db/!select (db/conn) "orders" ["*"]
                                            {:vehicle_id (:id vehicle)})))))))
+(defn update-courier-position!
+  [{:keys [lat lng db-conn courier]
+    :or {lat (str "34.0" (rand-int 9))
+         lng (str "-118.4" (rand-int 9))}}]
+  (db/!update (db/conn) "couriers"
+              {:on_duty 1
+               :connected 1
+               :lat lat
+               :lng lng
+               :last_ping (quot (c/to-long (l/local-now)) 1000)}
+              {:id (:id courier)}))

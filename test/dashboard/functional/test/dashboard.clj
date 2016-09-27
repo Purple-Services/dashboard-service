@@ -4,14 +4,15 @@
             [clojure.test :refer [deftest is testing use-fixtures]]
             [common.db :as db]
             [environ.core :refer [env]]
+            [dashboard.handler]
+            [dashboard.login :as login]
+            [dashboard.users :as users]
             [dashboard.test.data-tools :as data-tools]
             [dashboard.test.db-tools :refer [setup-ebdb-test-pool!
                                              clear-test-database
                                              setup-ebdb-test-for-conn-fixture
                                              clear-and-populate-test-database
                                              clear-and-populate-test-database-fixture]]
-            [dashboard.handler]
-            [dashboard.login :as login]
             [ring.adapter.jetty :refer [run-jetty]]))
 
 ;; note: you will need a bit of elisp in order be able to use load the file
@@ -177,6 +178,60 @@
            (text (find-element
                   alert-danger))))))
 
+(defn set-minimum-dash-env!
+  []
+  (let [db-conn (db/conn)
+        dash-email "foo@bar.com"
+        dash-password "foobar"
+        dash-full-name "Foo Bar"
+        ;; create dash user
+        _ (data-tools/create-dash-user! {:db-conn db-conn
+                                         :platform-id dash-email
+                                         :password dash-password
+                                         :full-name dash-full-name})
+        ;; give very minimal perms
+        _ (data-tools/give-perms!
+           {:user (login/get-user-by-email
+                   db-conn "foo@bar.com")
+            :db-conn db-conn
+            :perms "view-dash,view-couriers,view-users,view-zones,view-orders"})
+        user-email "baz@qux.org"
+        user-password "bazqux"
+        user-full-name "Baz Qux"
+        ;; create a user
+        _ (data-tools/register-user! {:db-conn db-conn
+                                      :platform-id user-email
+                                      :password user-password
+                                      :full-name user-full-name})
+        user (first (db/!select db-conn "users" ["*"] {:email user-email}))
+        ;; create a courier account
+        courier-email "courier@purpleapp.com"
+        courier-password "courier"
+        courier-full-name "Purple Courier"
+        ;; create the courier
+        _ (data-tools/register-user! {:db-conn db-conn
+                                      :platform-id courier-email
+                                      :password courier-password
+                                      :full-name courier-full-name})
+        courier (first (db/!select db-conn "users" ["*"]
+                                   {:email courier-email}))
+        _ (users/convert-to-courier! db-conn courier)
+        ;; put courier on the map
+        _ (data-tools/update-courier-position! {:db-conn db-conn
+                                                :courier courier})
+        vehicle (data-tools/vehicle-map {:user_id (:id user)})
+        ;; add a vehicle to user
+        _ (data-tools/create-vehicle! db-conn vehicle user)
+        ;; add an order
+        order (data-tools/order-map {:user_id (:id user)
+                                     :vehicle_id (:id vehicle)
+                                     :courier_id (:id courier)})
+        _ (data-tools/create-order! (db/conn) order)
+        logout {:xpath "//a[text()='Logout']"}]
+    (go-to-uri "login")
+    (login-dashboard dash-email dash-password)
+    (wait-until #(exists? logout))))
+
 (deftest login-tests
   (let [email "foo@bar.com"
         password "foobar"
@@ -202,7 +257,6 @@
       (go-to-uri "login")
       (login-dashboard email password)
       (wait-until #(exists? error-message))
-      ;;(check-error-alert "Error: Incorrect email / password combination.")
       (is (= "Error: Incorrect email / password combination."
              (text (find-element error-message)))))
     (testing "Create a user, login with credentials"
@@ -219,9 +273,7 @@
       ;; create a user, vehicle and order
       (go-to-uri "login")
       (login-dashboard email password)
-      (wait-until #(exists? logout))
-      ;;(is (exists? (find-element logout)))
-      )
+      (wait-until #(exists? logout)))
     (testing "Log back out."
       (logout-dashboard)
       (is (exists? (find-element login-button))))))
