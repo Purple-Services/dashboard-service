@@ -28,7 +28,7 @@
                                       include-user-name-phone-and-courier
                                       include-vehicle
                                       include-was-late
-                                      include-zone-info
+                                      ;;include-zone-info
                                       admin-event-log-str->edn
                                       orders-since-date
                                       search-orders
@@ -48,8 +48,8 @@
                                      update-user!
                                      convert-to-courier!]]
             [dashboard.zones :refer [get-zone-by-id
-                                     read-zone-strings
-                                     validate-and-update-zone!]]
+                                     validate-and-update-zone!
+                                     get-all-zones-from-db]]
             [ring.middleware.cookies :refer [wrap-cookies]]
             [ring.middleware.json :refer [wrap-json-body wrap-json-response]]
             [ring.util.response :refer [header set-cookie response redirect]]
@@ -449,7 +449,6 @@
        (response
         (into []
               (->> (get-zone-by-id (conn) id)
-                   (read-zone-strings)
                    list))))
   ;; update a zone's description. currently only supports
   ;; updating fuel_prices, service_fees and service_time_bracket
@@ -457,20 +456,14 @@
        (let [b (keywordize-keys body)]
          (response
           (validate-and-update-zone! (conn) b))))
-  ;; return all zones
+  ;; return all zones - not used this way anymore
   (GET "/zones" []
        (response
         ;; needed because cljs.reader/read-string can't handle
         ;; keywords that begin with numbers
-        (mapv
-         #(assoc %
-                 :fuel_prices (stringify-keys
-                               (read-string (:fuel_prices %)))
-                 :service_fees (stringify-keys
-                                (read-string (:service_fees %)))
-                 :service_time_bracket (read-string
-                                        (:service_time_bracket %)))
-         (into [] (zones/get-all-zones-from-db (conn))))))
+        (into [] (get-all-zones-from-db (conn)))))
+  ;; return all zips we will use
+  ;;(POST "/zips")
   ;; return zcta defintions for zips
   (POST "/zctas" {body :body}
         (response
@@ -490,7 +483,7 @@
                    (include-user-name-phone-and-courier
                     (conn))
                    (include-vehicle (conn))
-                   (include-zone-info (conn))
+                   ;;(include-zone-info (conn))
                    (include-eta (conn))
                    (include-was-late)
                    (admin-event-log-str->edn)))))))
