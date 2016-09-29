@@ -3,7 +3,7 @@
             [bouncer.validators :as v]
             [clojure.string :as s]
             [clojure.edn :as edn]
-            [common.couriers :refer [process-courier]]
+            [common.couriers :refer [parse-courier-zones]]
             [common.db :refer [!select !update conn]]
             [common.util :refer [split-on-comma]]))
 
@@ -17,7 +17,11 @@
     (if (empty? courier)
       {:success false
        :error (str "There is no courier with id: " id)}
-      (process-courier courier))))
+      (assoc (parse-courier-zones courier)
+             :timestamp_create
+             (/ (.getTime
+                 (:timestamp_create courier))
+                1000)))))
 
 (defn include-lateness
   "Given a courier map m, return a map with :lateness included using

@@ -3,20 +3,29 @@
             [bouncer.validators :as v]
             [clojure.string :as s]
             [clojure.walk :refer [stringify-keys]]
+            [common.db :refer [!select !update]]
             [common.util :refer [split-on-comma five-digit-zip-code
                                  in?]]
-            [common.db :refer [!select !update]]))
+            [dashboard.db :refer [raw-sql-query]]))
 
-(defn read-zone-strings
-  "Given a zone from the database, convert edn strings to clj data"
-  [zone]
-  (assoc zone
-         :fuel_prices (stringify-keys
-                       (read-string (:fuel_prices zone)))
-         :service_fees (stringify-keys
-                        (read-string (:service_fees zone)))
-         :service_time_bracket (read-string
-                                (:service_time_bracket zone))))
+#_ (defn read-zone-strings
+     "Given a zone from the database, convert edn strings to clj data"
+     [zone]
+     (assoc zone
+            :fuel_prices (stringify-keys
+                          (read-string (:fuel_prices zone)))
+            :service_fees (stringify-keys
+                           (read-string (:service_fees zone)))
+            :service_time_bracket (read-string
+                                   (:service_time_bracket zone))))
+(defn get-all-zones-from-db
+  "Retrieve all zones from the DB"
+  [db-conn]
+  (let [results
+        (raw-sql-query
+         db-conn
+         ["SELECT zones.id as `id`, zones.name as `name`, zones.rank as `rank`,zones.active as `active`,zones.config as `config`, GROUP_CONCAT(distinct zips.zip) as `zips`, COUNT(DISTINCT zips.zip) as `zip_count` FROM `zones` LEFT JOIN zips ON FIND_IN_SET (zones.id,zips.zones) GROUP BY zones.id;"])]
+    results))
 
 (defn get-zone-by-id
   [db-conn id]
@@ -103,18 +112,18 @@
   (if (b/valid? zone zone-validations)
     (let [{:keys [price-87 price-91 service-fee-60 service-fee-180 service-fee-300
                   service-time-bracket-begin service-time-bracket-end id]} zone
-          update-result (!update db-conn "zones"
-                                 {:fuel_prices
-                                  (str {:87 price-87
-                                        :91 price-91})
-                                  :service_fees
-                                  (str {:60 service-fee-60
-                                        :180 service-fee-180
-                                        :300 service-fee-300})
-                                  :service_time_bracket
-                                  (str [service-time-bracket-begin
-                                        service-time-bracket-end])}
-                                 {:id (:id zone)})]
+                  update-result (!update db-conn "zones"
+                                         {:fuel_prices
+                                          (str {:87 price-87
+                                                :91 price-91})
+                                          :service_fees
+                                          (str {:60 service-fee-60
+                                                :180 service-fee-180
+                                                :300 service-fee-300})
+                                          :service_time_bracket
+                                          (str [service-time-bracket-begin
+                                                service-time-bracket-end])}
+                                         {:id (:id zone)})]
       (if (:success update-result)
         (assoc update-result :id id)
         update-result))

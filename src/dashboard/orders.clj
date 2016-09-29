@@ -11,8 +11,7 @@
             [common.couriers :as couriers]
             [common.users :as users]
             [common.util :refer [in? map->java-hash-map split-on-comma]]
-            [common.zones :refer [get-all-zones-from-db
-                                  get-zones]]
+            ;[common.zones :refer [get-zones]]
             [common.orders :as orders]))
 
 (def orders-select
@@ -66,24 +65,24 @@
     (map #(assoc % :vehicle (id->vehicle (:vehicle_id %)))
          orders)))
 
-(defn include-zone-info
-  "Given a vector of orders, assoc the zone and zone_color associated with the
-  order"
-  [db-conn orders]
-  (let [zones (get-zones db-conn)
-        get-zone-by-zip-code (fn [zip-code]
-                               (first (filter #(in? (:zip_codes %) zip-code)
-                                              zones)))]
-    (map #(assoc %
-                 :zone-color
-                 (:color
-                  (get-zone-by-zip-code
-                   (:address_zip %)))
-                 :zone
-                 (:id
-                  (get-zone-by-zip-code
-                   (:address_zip %))))
-         orders)))
+;; (defn include-zone-info
+;;   "Given a vector of orders, assoc the zone and zone_color associated with the
+;;   order"
+;;   [db-conn orders]
+;;   (let [zones (get-zones db-conn)
+;;         get-zone-by-zip-code (fn [zip-code]
+;;                                (first (filter #(in? (:zip_codes %) zip-code)
+;;                                               zones)))]
+;;     (map #(assoc %
+;;                  :zone-color
+;;                  (:color
+;;                   (get-zone-by-zip-code
+;;                    (:address_zip %)))
+;;                  :zone
+;;                  (:id
+;;                   (get-zone-by-zip-code
+;;                    (:address_zip %))))
+;;          orders)))
 
 (defn include-was-late
   "Given a vector of orders, assoc the boolean was_late associated with the
@@ -243,7 +242,7 @@
   (->> orders
        (include-user-name-phone-and-courier db-conn)
        (include-vehicle db-conn)
-       (include-zone-info db-conn)
+       ;;(include-zone-info db-conn)
        (include-was-late)
        (admin-event-log-str->edn)))
 
