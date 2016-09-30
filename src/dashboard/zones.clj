@@ -25,7 +25,12 @@
         (raw-sql-query
          db-conn
          ["SELECT zones.id as `id`, zones.name as `name`, zones.rank as `rank`,zones.active as `active`,zones.config as `config`, GROUP_CONCAT(distinct zips.zip) as `zips`, COUNT(DISTINCT zips.zip) as `zip_count` FROM `zones` LEFT JOIN zips ON FIND_IN_SET (zones.id,zips.zones) GROUP BY zones.id;"])]
-    results))
+    (map #(assoc %
+                 :config
+                 (read-string (:config %))
+                 :zips
+                 (s/join ", " (s/split (:zips %) #",")))
+         results)))
 
 (defn get-zone-by-id
   [db-conn id]
