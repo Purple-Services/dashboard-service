@@ -49,6 +49,7 @@
                                      convert-to-courier!]]
             [dashboard.zones :refer [get-zone-by-id
                                      validate-and-update-zone!
+                                     create-zone!
                                      get-all-zones-from-db]]
             [ring.middleware.cookies :refer [wrap-cookies]]
             [ring.middleware.json :refer [wrap-json-body wrap-json-response]]
@@ -456,6 +457,10 @@
        (let [b (keywordize-keys body)]
          (response
           (validate-and-update-zone! (conn) b))))
+  (POST "/zone" {body :body}
+        (let [b (keywordize-keys body)]
+          (response
+           (create-zone! (conn) b))))
   ;; return all zones - not used this way anymore
   (GET "/zones" []
        (response
