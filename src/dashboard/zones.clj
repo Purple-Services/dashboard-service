@@ -3,10 +3,12 @@
             [bouncer.validators :as v]
             [clojure.string :as s]
             [clojure.walk :refer [stringify-keys]]
-            [common.db :refer [!select !update]]
+            [common.db :refer [conn !insert !select !update]]
             [common.util :refer [split-on-comma five-digit-zip-code
                                  in?]]
-            [dashboard.db :refer [raw-sql-query]]))
+            [common.zones :as zones]
+            [dashboard.db :refer [raw-sql-query]]
+            [dashboard.utils :as utils]))
 
 #_ (defn read-zone-strings
      "Given a zone from the database, convert edn strings to clj data"
@@ -25,12 +27,25 @@
   (let [results
         (raw-sql-query
          db-conn
-         ["SELECT zones.id as `id`, zones.name as `name`, zones.rank as `rank`,zones.active as `active`,zones.config as `config`, GROUP_CONCAT(distinct zips.zip) as `zips`, COUNT(DISTINCT zips.zip) as `zip_count` FROM `zones` LEFT JOIN zips ON FIND_IN_SET (zones.id,zips.zones) GROUP BY zones.id;"])]
+         [(str "SELECT zones.id as `id`, zones.name as `name`,"
+               "zones.rank as `rank`,zones.active as `active`,"
+               "zones.config as `config`, "
+               "GROUP_CONCAT(distinct zips.zip) as `zips`, "
+               "COUNT(DISTINCT zips.zip) as `zip_count` FROM `zones` "
+               "LEFT JOIN zips ON FIND_IN_SET (zones.id,zips.zones) "
+               "GROUP BY zones.id;")])]
     (map #(assoc %
                  :config
-                 (read-string (:config %))
+                 (let [config (:config %)]
+                   (if (and (utils/edn-read? config)
+                            (not (nil? config)))
+                     (read-string config)
+                     "config error"))
                  :zips
-                 (s/join ", " (s/split (:zips %) #",")))
+                 (let [zips (:zips %)]
+                   (if-not (nil? zips)
+                     (s/join ", " (s/split (:zips %) #","))
+                     "Zip Code Error")))
          results)))
 
 (defn get-zone-by-id
@@ -45,9 +60,42 @@
                     "COUNT(DISTINCT zips.zip) as `zip_count` FROM `zones` "
                     "LEFT JOIN zips ON FIND_IN_SET (zones.id,zips.zones) "
                     "WHERE zones.id = " id " "
-                    "GROUP BY zones.id;"
-                    )])]
+                    "GROUP BY zones.id;")])]
     (first zone)))
+
+(defn get-zone-by-name
+  "Return a zone as expected by the dashboard client by name"
+  [db-conn name]
+  (let [zone (raw-sql-query
+              db-conn
+              [(str "SELECT zones.id as `id`, zones.name as `name`,"
+                    "zones.rank as `rank`,zones.active as `active`,"
+                    "zones.config as `config`, "
+                    "GROUP_CONCAT(distinct zips.zip) as `zips`, "
+                    "COUNT(DISTINCT zips.zip) as `zip_count` FROM `zones` "
+                    "LEFT JOIN zips ON FIND_IN_SET (zones.id,zips.zones) "
+                    "WHERE zones.name = '" name "' "
+                    "GROUP BY zones.id;")])]
+    (first zone)))
+
+(defn get-all-zips-by-zone-id
+  "Return all zips associated with zone-id"
+  [db-conn zone-id]
+  (let [zips (raw-sql-query
+              db-conn
+              [(str "SELECT zip,zones "
+                    "FROM zips "
+                    "WHERE FIND_IN_SET (" zone-id ",zips.zones);")])]
+    zips))
+
+(defn add-zips-to-zones
+  "Given a list of zips, add these zips to zone by updating the zones
+  defitnition for zips that already exist and creating new zips for those that
+  are nonexistant. New zips will have the zone defition '1,<zone-id>' because
+  all zips must be members of the Earth zone."
+  [db-conn zips zone-id]
+  true)
+
 
 #_ (def zone-validations
      {:price-87 [[v/required :message "87 Octane price can not be blank!"]
@@ -102,15 +150,70 @@
                                   :message
                                   "Service time must be between 0 and 1440"]]})
 
+(defn name-available?
+  "Is the name for zone currently available?"
+  [name]
+  (not (boolean (get-zone-by-name (conn) name))))
+
+(defn valid-zip?
+  "Check that a zip code is just 5 digits"
+  [zip-code]
+  (boolean (re-matches #"\d{5}" zip-code)))
+
+
+(defn zip-str->zip-vec
+  "Given a list of zip codes separated by a non-number, seperate them into an
+  vector of zips."
+  [zip-str]
+  ;; can be given a wide variety of garbage, but only valid zips will be
+  ;; returned. This is to ensure that the db never gets populated with
+  ;; invalid-looking zips. However, there is no guarantee that the zips
+  ;; actually exist
+  (into [] (re-seq #"\d{5}" zip-str)))
+
+(defn zips-valid?
+  "Given a string of zips, check to see if they return some valid zips"
+  [zip-codes]
+  (let [zips (zip-str->zip-vec zip-codes)]
+    (and (not (empty? zips)) (every? identity (map valid-zip? zips)))))
+
 (def zone-validations
-  {:name [[v/required :message "Name can not be blank!"]
+  {:name [[name-available? :message "Name is already in use"]
+          [v/required :message "Name can not be blank!"]
           [v/string :message "Name must be a string"]]
    :rank [[v/required :message "Rank can not be blank!"]
           [v/integer :message "Rank must be a whole number"]
           [v/in-range [1 10000] :message
            "Rank must be between 1 and 10000"]]
    :active [[v/required :message "Active must be present"]
-            [v/boolean :message "Active must be either true or false"]]})
+            [v/boolean :message "Active must be either true or false"]]
+   :zips [[v/required :message "A zone must have zip codes associated with it"]
+          [zips-valid? :message (str "You must provide 5-digit zip codes "
+                                     "separated by a commas")]]})
+
+(def new-zone-validations
+  zone-validations)
+
+(defn create-zone!
+  "Given a new-zone map, validate it. If valid, create zone else return the
+  bouncer error map."
+  [db-conn new-zone]
+  (println new-zone)
+  (if (b/valid? new-zone new-zone-validations)
+    (let [{:keys [name rank active zips]} new-zone
+          zips (zip-str->zip-vec zips)
+          insert-result (!insert db-conn "zones"
+                                 {:name name
+                                  :rank rank
+                                  :active active})
+          new-zone (first (!select db-conn "zones"
+                                   [:id] {:name name}))
+          id (:id new-zone)]
+      (if (:success insert-result)
+        (assoc insert-result :id id)
+        insert-result))
+    {:success false
+     :validation (b/validate new-zone new-zone-validations)}))
 
 (defn validate-and-update-zone!
   "Given a zone map, validate it. If valid, update zone else return the

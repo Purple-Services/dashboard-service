@@ -5,7 +5,8 @@
             [clojure.edn :as edn]
             [common.couriers :refer [parse-courier-zones]]
             [common.db :refer [!select !update conn]]
-            [common.util :refer [split-on-comma]]))
+            [common.util :refer [split-on-comma]]
+            [dashboard.utils :as utils]))
 
 (defn get-by-id
   "Get a courier from db by courier's id"
@@ -100,14 +101,6 @@
                     :arn_endpoint (:arn_endpoint user-courier))))
          m)))
 
-(defn edn-read?
-  "Attempt to read x with edn/read-string, return true if x can be read,false
-  otherwise "
-  [x]
-  (try (edn/read-string x)
-       true
-       (catch Exception e false)))
-
 (def courier-validations
   {:zones [;; verify that the zone assignments can be read as edn
            ;; must be done first to prevent throwing an error
@@ -115,7 +108,7 @@
            [#(every? identity
                      (->> %
                           split-on-comma
-                          (map edn-read?)))
+                          (map utils/edn-read?)))
             :message (str "Zones assignments must be "
                           "comma-separated integer "
                           "(whole number) values!") ]
