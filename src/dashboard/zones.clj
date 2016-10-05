@@ -1,13 +1,15 @@
 (ns dashboard.zones
   (:require [bouncer.core :as b]
             [bouncer.validators :as v]
+            [clojure.data :as data]
             [clojure.string :as s]
             [clojure.walk :refer [stringify-keys]]
             [common.db :refer [conn !insert !select !update]]
             [common.util :refer [split-on-comma five-digit-zip-code
                                  in?]]
             [common.zones :as zones]
-            [dashboard.db :refer [raw-sql-query]]
+            [dashboard.db :refer [raw-sql-query
+                                  raw-sql-update]]
             [dashboard.utils :as utils]))
 
 #_ (defn read-zone-strings
@@ -88,13 +90,68 @@
                     "WHERE FIND_IN_SET (" zone-id ",zips.zones);")])]
     zips))
 
-(defn add-zips-to-zones
+(defn add-zips-to-zone!
   "Given a list of zips, add these zips to zone by updating the zones
   defitnition for zips that already exist and creating new zips for those that
   are nonexistant. New zips will have the zone defition '1,<zone-id>' because
   all zips must be members of the Earth zone."
   [db-conn zips zone-id]
-  true)
+  (let [new-zone-string (if (= zone-id 1)
+                          "1"
+                          (str "1," zone-id))
+        mysql-zips-str (str "(" (s/join ", " zips) ")")
+        ;; all zips that exist
+        existant-zips (raw-sql-query
+                       db-conn
+                       [(str "SELECT zip,zones FROM `zips` "
+                             "WHERE `zip` IN "
+                             mysql-zips-str)])
+        existant-zips-list (map :zip existant-zips)
+        zips-diff (data/diff (set existant-zips-list) (set zips))
+        non-existant-zips (second zips-diff)
+        mysql-non-existant-zip-values (s/replace
+                                       (apply
+                                        str
+                                        (map #(str "(" "'" % "'"
+                                                   ",'" new-zone-string "'),")
+                                             non-existant-zips))
+                                       #",$"
+                                       ";")
+        non-existant-zip-insert-statement (str "INSERT INTO `zips` (a,b)"
+                                               " VALUES "
+                                               mysql-non-existant-zip-values)
+        ;; (apply
+        ;;  str
+        ;;  (map #(str "(" "'" % "'"
+        ;;             ",'" new-zone-string "'),")
+        ;;       non-existant-zips))
+        ;; zips that exist, but are already assigned to
+        ;; some zones
+        assigned-current-zips (raw-sql-query
+                               db-conn
+                               [(str "SELECT zip,zones FROM `zips` "
+                                     "WHERE `zip` IN "
+                                     mysql-zips-str
+                                     "AND "
+                                     "NOT FIND_IN_SET "
+                                     "(" zone-id ",zips.zones);")])
+        assigned-current-zips-str (str
+                                   "("
+                                   (s/join ", "
+                                           (map :zip assigned-current-zips))
+                                   ")")]
+    ;; update the existant zones
+    #_ (when (and (not= zone-id 1)
+                  (not (empty? assigned-current-zips)))
+         (raw-sql-update
+          db-conn
+          (str "UPDATE `zips` SET `zones` = CONCAT(zones,'," zone-id "') "
+               "WHERE `zip` IN " assigned-current-zips-str ";")))
+    ;; {:existant-zips-list existant-zips-list
+    ;;  :zips zips
+    ;;  :zips-diff zips-diff
+    ;;  :non-existant-zips non-existant-zips}
+    non-existant-zip-insert-statement))
 
 
 #_ (def zone-validations
