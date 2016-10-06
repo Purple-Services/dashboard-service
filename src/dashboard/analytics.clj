@@ -385,6 +385,25 @@
          " <= "
          (convert-datetime-timezone-to-UTC-mysql to-date timezone) " ")))
 
+;; note: This does not result in a proper offset
+;; t/time-zone-for-id SHOULD be equivalent to t/timezone-for-offset
+;; (t/to-time-zone (c/from-long (c/to-long "2016-09-01")) (t/time-zone-for-id "America/Los_Angeles"))
+(defn get-membership-fees
+  "Retrun the membership fees from-date until to-date"
+  [{:keys [db-conn from-date to-date]}]
+  (let [subscription-logs (raw-sql-query
+                           db-conn
+                           [(str "SELECT `subscription_payment_log` "
+                                 "FROM `users` WHERE "
+                                 "`subscription_payment_log` != '';")])
+        subscription-logs-maps (apply concat (map
+                                              #(read-string
+                                                (:subscription_payment_log %))
+                                              subscription-logs))
+        paid-subscriptions  (filter :captured subscription-logs-maps)]
+    {:count-subscription-maps (count subscription-logs-maps)
+     :count-paid-subscriptions (count paid-subscriptions)}))
+
 (defn totals-query
   "Return a MySQL string for retrieving totals of select-statement for
   completed orders in the range from-date to to-date using timezone.
@@ -1075,6 +1094,18 @@
                                 rename-map))))
         formatted-adder #(read-string (format "%.2f" (+ (double %1)
                                                         (double %2))))
+        ;; user-id associated with managed accounts
+        account-manager-user-ids
+        (raw-sql-query
+         db-conn
+         [(str "SELECT users.id FROM `users` "
+               "JOIN account_managers "
+               "ON account_managers.id = users.account_manager_id;")])
+        account-manager-user-ids-exclude-sql
+        (str "(" (->> (map :id account-manager-user-ids)
+                      (map #(str "'" % "'"))
+                      (s/join ","))
+             ")")
         ;; erase file
         _ (spit "totals.xlsx" "")
         ;; --- orders
@@ -1189,7 +1220,9 @@
          (merge
           base-request-map
           {:select-statement
-           "ROUND(SUM(`referral_gallons_used` * `gas_price`) / 100,2) AS `count`"})
+           "ROUND(SUM(`referral_gallons_used` * `gas_price`) / 100,2) AS `count`"
+           :where-clause (str "AND `user_id` NOT IN ('evU83hVPIbccvZE0C2uL','nszMr7cDRfRrbTksXaEC','k4KTi1xmes8LLd9ZZhsH') AND `user_id` NOT IN " account-manager-user-ids-exclude-sql)
+           })
          {:y :referral-gallons-cost})
         coupons-cost
         (get-query
@@ -1198,7 +1231,8 @@
           base-request-map
           {:select-statement
            "ROUND(abs(sum(service_fee + (gas_price * (gallons - referral_gallons_used) - total_price))/100),2) as `coupon_value`"
-           :where-clause "AND `user_id` NOT IN ('evU83hVPIbccvZE0C2uL','nszMr7cDRfRrbTksXaEC','k4KTi1xmes8LLd9ZZhsH')"})
+           :where-clause (str "AND `user_id` NOT IN ('evU83hVPIbccvZE0C2uL','nszMr7cDRfRrbTksXaEC','k4KTi1xmes8LLd9ZZhsH') AND `user_id` NOT IN " account-manager-user-ids-exclude-sql)
+           })
          {:y :coupons-cost})
         ;; note: insert-value-when-missing-index-map should be replaced
         ;; with a call to insert-value-when-missing-datetime
