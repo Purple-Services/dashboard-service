@@ -117,14 +117,9 @@
                                              non-existant-zips))
                                        #",$"
                                        ";")
-        non-existant-zip-insert-statement (str "INSERT INTO `zips` (a,b)"
+        non-existant-zip-insert-statement (str "INSERT INTO `zips` (zip,zones)"
                                                " VALUES "
                                                mysql-non-existant-zip-values)
-        ;; (apply
-        ;;  str
-        ;;  (map #(str "(" "'" % "'"
-        ;;             ",'" new-zone-string "'),")
-        ;;       non-existant-zips))
         ;; zips that exist, but are already assigned to
         ;; some zones
         assigned-current-zips (raw-sql-query
@@ -141,18 +136,18 @@
                                            (map :zip assigned-current-zips))
                                    ")")]
     ;; update the existant zones
-    #_ (when (and (not= zone-id 1)
-                  (not (empty? assigned-current-zips)))
-         (raw-sql-update
-          db-conn
-          (str "UPDATE `zips` SET `zones` = CONCAT(zones,'," zone-id "') "
-               "WHERE `zip` IN " assigned-current-zips-str ";")))
-    ;; {:existant-zips-list existant-zips-list
-    ;;  :zips zips
-    ;;  :zips-diff zips-diff
-    ;;  :non-existant-zips non-existant-zips}
-    non-existant-zip-insert-statement))
-
+    (when (and (not= zone-id 1)
+               (not (empty? assigned-current-zips)))
+      (raw-sql-update
+       db-conn
+       (str "UPDATE `zips` SET `zones` = CONCAT(zones,'," zone-id "') "
+            "WHERE `zip` IN " assigned-current-zips-str ";")))
+    ;; add the non-existant zones
+    (when-not (empty? non-existant-zips)
+      (raw-sql-update
+       db-conn
+       non-existant-zip-insert-statement))
+    {:success true}))
 
 #_ (def zone-validations
      {:price-87 [[v/required :message "87 Octane price can not be blank!"]
