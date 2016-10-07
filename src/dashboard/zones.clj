@@ -276,6 +276,17 @@
   [zip-code]
   (boolean (re-matches #"\d{5}" zip-code)))
 
+(defn new-name?
+  "Is name a new name for zone with id?"
+  [name id]
+  (let [current-zone (get-zone-by-id (conn) id)]
+    (not= (:name current-zone) name)))
+
+(defn name-available-or-new-name?
+  "Is the name either available or a new name in the db?"
+  [name id]
+  (or (name-available? name)
+      (new-name? name id)))
 
 (defn zip-str->zip-vec
   "Given a list of zip codes separated by a non-number, seperate them into an
@@ -293,8 +304,16 @@
   (let [zips (zip-str->zip-vec zip-codes)]
     (and (not (empty? zips)) (every? identity (map valid-zip? zips)))))
 
-(def zone-validations
-  {:name [[name-available? :message "Name is already in use"]
+(defn zone-exists?
+  "Does the zone with id exist?"
+  [id]
+  (boolean (not (nil? (get-zone-by-id (conn) id)))))
+
+(defn zone-validations [& [id]]
+  {:id   [[zone-exists?
+           :message "That zone doesn't yet exist, create it first"]]
+   :name [[name-available-or-new-name? id
+           :message "Name already exists! Please use a unique zone name"]
           [v/required :message "Name can not be blank!"]
           [v/string :message "Name must be a string"]]
    :rank [[v/required :message "Rank can not be blank!"]
@@ -308,7 +327,13 @@
                                      "separated by a commas")]]})
 
 (def new-zone-validations
-  zone-validations)
+  (let [zone-validations (zone-validations)]
+    (-> zone-validations
+        (assoc :name
+               [[name-available? :message "Name is already in use"]
+                [v/required :message "Name can not be blank!"]
+                [v/string :message "Name must be a string"]])
+        (dissoc :id))))
 
 (defn create-zone!
   "Given a new-zone map, validate it. If valid, create zone else return the
@@ -317,7 +342,7 @@
   (println new-zone)
   (if (b/valid? new-zone new-zone-validations)
     (let [{:keys [name rank active zips]} new-zone
-          zips (zip-str->zip-vec zips)
+          zips-str (zip-str->zip-vec zips)
           insert-result (!insert db-conn "zones"
                                  {:name name
                                   :rank rank
@@ -326,12 +351,16 @@
                                    [:id] {:name name}))
           id (:id new-zone)]
       (if (:success insert-result)
-        (assoc insert-result :id id)
+        (do
+          ;; add the zips
+          (add-zips-to-zone! db-conn zips-str)
+          ;; return a result
+          (assoc insert-result :id id))
         insert-result))
     {:success false
      :validation (b/validate new-zone new-zone-validations)}))
 
-(defn validate-and-update-zone!
+(defn update-zone!
   "Given a zone map, validate it. If valid, update zone else return the
   bouncer error map.
 
@@ -359,15 +388,23 @@
   7:30am is represented as 450 which is (+ (* 60 7) 30)
   10:30pm is represened as 1350 which is (+ (* 60 22) 30)"
   [db-conn zone]
-  (if (b/valid? zone zone-validations)
-    (let [{:keys [id name rank active]} zone
-          update-result (!update db-conn "zones"
-                                 {:name name
-                                  :rank rank
-                                  :active active}
-                                 {:id id})]
-      (if (:success update-result)
-        (assoc update-result :id id)
-        update-result))
-    {:success false
-     :validation (b/validate zone zone-validations)}))
+  (let [{:keys [id name rank active zips]} zone]
+    (if (b/valid? zone (zone-validations id))
+      (let [new-zips-vec (zip-str->zip-vec zips)
+            old-zips-vec (map :zips (get-all-zips-by-zone-id db-conn id))
+            update-result (!update db-conn "zones"
+                                   {:name name
+                                    :rank rank
+                                    :active active}
+                                   {:id id})
+            [old-zips new-zips _] (data/diff old-zips-vec new-zips-vec)]
+        (if (:success update-result)
+          (do
+            ;; update the zips in the zone
+            (remove-zips-from-zone! old-zips)
+            (add-zips-to-zone! new-zips)
+            ;; return the result with id of zone
+            (assoc update-result :id id))
+          update-result))
+      {:success false
+       :validation (b/validate zone (zone-validations id))})))
