@@ -48,7 +48,7 @@
                                      update-user!
                                      convert-to-courier!]]
             [dashboard.zones :refer [get-zone-by-id
-                                     validate-and-update-zone!
+                                     update-zone!
                                      create-zone!
                                      get-all-zones-from-db]]
             [ring.middleware.cookies :refer [wrap-cookies]]
@@ -456,7 +456,7 @@
   (PUT "/zone" {body :body}
        (let [b (keywordize-keys body)]
          (response
-          (validate-and-update-zone! (conn) b))))
+          (update-zone! (conn) b))))
   (POST "/zone" {body :body}
         (let [b (keywordize-keys body)]
           (response

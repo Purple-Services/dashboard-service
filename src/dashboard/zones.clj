@@ -276,17 +276,24 @@
   [zip-code]
   (boolean (re-matches #"\d{5}" zip-code)))
 
-(defn new-name?
+(defn new-zone-name?
   "Is name a new name for zone with id?"
   [name id]
   (let [current-zone (get-zone-by-id (conn) id)]
     (not= (:name current-zone) name)))
 
+(defn current-zone-name?
+  "Is name the same for zone?"
+  [name id]
+  (let [current-zone (get-zone-by-id (conn) id)]
+    (= (:name current-zone) name)))
+
 (defn name-available-or-new-name?
   "Is the name either available or a new name in the db?"
   [name id]
-  (or (name-available? name)
-      (new-name? name id)))
+  (or (and (new-name? name id)
+           (name-available? name))
+      (current-zone-name? name id)))
 
 (defn zip-str->zip-vec
   "Given a list of zip codes separated by a non-number, seperate them into an
@@ -339,10 +346,9 @@
   "Given a new-zone map, validate it. If valid, create zone else return the
   bouncer error map."
   [db-conn new-zone]
-  (println new-zone)
   (if (b/valid? new-zone new-zone-validations)
     (let [{:keys [name rank active zips]} new-zone
-          zips-str (zip-str->zip-vec zips)
+          zips-vec (zip-str->zip-vec zips)
           insert-result (!insert db-conn "zones"
                                  {:name name
                                   :rank rank
@@ -353,7 +359,7 @@
       (if (:success insert-result)
         (do
           ;; add the zips
-          (add-zips-to-zone! db-conn zips-str)
+          (add-zips-to-zone! db-conn zips-vec id)
           ;; return a result
           (assoc insert-result :id id))
         insert-result))
@@ -401,8 +407,8 @@
         (if (:success update-result)
           (do
             ;; update the zips in the zone
-            (remove-zips-from-zone! old-zips)
-            (add-zips-to-zone! new-zips)
+            (remove-zips-from-zone! db-conn old-zips id)
+            (add-zips-to-zone! db-conn new-zips id)
             ;; return the result with id of zone
             (assoc update-result :id id))
           update-result))
