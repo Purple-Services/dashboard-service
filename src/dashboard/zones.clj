@@ -291,7 +291,7 @@
 (defn name-available-or-new-name?
   "Is the name either available or a new name in the db?"
   [name id]
-  (or (and (new-name? name id)
+  (or (and (new-zone-name? name id)
            (name-available? name))
       (current-zone-name? name id)))
 
