@@ -30,8 +30,8 @@
         (raw-sql-query
          db-conn
          [(str "SELECT zones.id as `id`, zones.name as `name`,"
-               "zones.rank as `rank`,zones.active as `active`,"
-               "zones.config as `config`, "
+               "zones.rank as `rank`, zones.active as `active`,"
+               "zones.color as `color`, zones.config as `config`, "
                "GROUP_CONCAT(distinct zips.zip) as `zips`, "
                "COUNT(DISTINCT zips.zip) as `zip_count` FROM `zones` "
                "LEFT JOIN zips ON FIND_IN_SET (zones.id,zips.zones) "
