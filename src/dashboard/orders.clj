@@ -12,7 +12,8 @@
             [common.users :as users]
             [common.util :refer [in? map->java-hash-map split-on-comma]]
             [common.zones :refer [get-zip-def order->zones]]
-            [common.orders :as orders]))
+            [common.orders :as orders]
+            [dashboard.zones :refer [get-all-zones-from-db]]))
 
 (def orders-select
   [:id :lat :lng :status :gallons :gas_type
@@ -65,24 +66,32 @@
     (map #(assoc % :vehicle (id->vehicle (:vehicle_id %)))
          orders)))
 
-;; (defn include-zone-info
-;;   "Given a vector of orders, assoc the zone and zone_color associated with the
-;;   order"
-;;   [db-conn orders]
-;;   (let [zones (get-zones db-conn)
-;;         get-zone-by-zip-code (fn [zip-code]
-;;                                (first (filter #(in? (:zip_codes %) zip-code)
-;;                                               zones)))]
-;;     (map #(assoc %
-;;                  :zone-color
-;;                  (:color
-;;                   (get-zone-by-zip-code
-;;                    (:address_zip %)))
-;;                  :zone
-;;                  (:id
-;;                   (get-zone-by-zip-code
-;;                    (:address_zip %))))
-;;          orders)))
+(defn include-zone-info
+  "Given a vector of orders, assoc the zone and zone_color associated with the
+  order"
+  [db-conn orders]
+  (let [zones (map #(assoc %
+                           :zips (map s/trim (s/split (:zips %) #",")))
+                   (get-all-zones-from-db db-conn))
+        get-zones-by-zip (fn [zip]
+                           (filter #(in? (:zips %) zip) zones))
+        get-market-by-zip (fn [zip]
+                            (first (filter #(= 100 (:rank %))
+                                           (get-zones-by-zip zip))))]
+    (map #(assoc %
+                 :market-color
+                 (:color
+                  (get-market-by-zip
+                   (:address_zip %)))
+                 :market
+                 (:name
+                  (get-market-by-zip
+                   (:address_zip %)))
+                 :zones
+                 (map :id
+                      (get-zones-by-zip
+                       (:address_zip %))))
+         orders)))
 
 (defn include-was-late
   "Given a vector of orders, assoc the boolean was_late associated with the
@@ -240,7 +249,7 @@
   (->> orders
        (include-user-name-phone-and-courier db-conn)
        (include-vehicle db-conn)
-       ;;(include-zone-info db-conn)
+       (include-zone-info db-conn)
        (include-was-late)
        (admin-event-log-str->edn)))
 

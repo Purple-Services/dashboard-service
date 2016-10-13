@@ -28,7 +28,7 @@
                                       include-user-name-phone-and-courier
                                       include-vehicle
                                       include-was-late
-                                      ;;include-zone-info
+                                      include-zone-info
                                       admin-event-log-str->edn
                                       orders-since-date
                                       search-orders
@@ -348,6 +348,7 @@
         (response
          (let [b (keywordize-keys body)]
            {:couriers (->> (couriers/all-couriers (conn))
+                           convert-timestamps
                            (users/include-user-data (conn))
                            (include-lateness (conn))
                            (include-os-and-app-version (conn))
@@ -488,7 +489,7 @@
                    (include-user-name-phone-and-courier
                     (conn))
                    (include-vehicle (conn))
-                   ;;(include-zone-info (conn))
+                   (include-zone-info (conn))
                    (include-eta (conn))
                    (include-was-late)
                    (admin-event-log-str->edn)))))))
