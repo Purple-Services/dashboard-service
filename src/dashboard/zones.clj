@@ -2,6 +2,7 @@
   (:require [bouncer.core :as b]
             [bouncer.validators :as v]
             [clojure.data :as data]
+            [clojure.edn :as edn]
             [clojure.string :as s]
             [clojure.walk :refer [stringify-keys]]
             [common.db :refer [conn !insert !select !update]]
@@ -22,6 +23,21 @@
                            (read-string (:service_fees zone)))
             :service_time_bracket (read-string
                                    (:service_time_bracket zone))))
+(defn format-zone
+  "Given a zone, format it so that it will return proper json"
+  [zone]
+  (assoc zone
+         :config
+         (let [config (:config zone)]
+           (if (and (utils/edn-read? config)
+                    (not (nil? config)))
+             (edn/read-string config)
+             "config error"))
+         :zips
+         (let [zips (:zips zone)]
+           (if-not (nil? zips)
+             (s/join ", " (s/split (:zips zone) #","))
+             "Zip Code Error"))))
 
 (defn get-all-zones-from-db
   "Retrieve all zones from the DB"
@@ -36,18 +52,7 @@
                "COUNT(DISTINCT zips.zip) as `zip_count` FROM `zones` "
                "LEFT JOIN zips ON FIND_IN_SET (zones.id,zips.zones) "
                "GROUP BY zones.id;")])]
-    (map #(assoc %
-                 :config
-                 (let [config (:config %)]
-                   (if (and (utils/edn-read? config)
-                            (not (nil? config)))
-                     (read-string config)
-                     "config error"))
-                 :zips
-                 (let [zips (:zips %)]
-                   (if-not (nil? zips)
-                     (s/join ", " (s/split (:zips %) #","))
-                     "Zip Code Error")))
+    (map format-zone
          results)))
 
 (defn get-zone-by-id
@@ -63,7 +68,7 @@
                     "LEFT JOIN zips ON FIND_IN_SET (zones.id,zips.zones) "
                     "WHERE zones.id = " id " "
                     "GROUP BY zones.id;")])]
-    (first zone)))
+    (format-zone (first zone))))
 
 (defn get-zone-by-name
   "Return a zone as expected by the dashboard client by name"
@@ -347,12 +352,13 @@
   bouncer error map."
   [db-conn new-zone]
   (if (b/valid? new-zone new-zone-validations)
-    (let [{:keys [name rank active zips]} new-zone
+    (let [{:keys [name rank active zips config]} new-zone
           zips-vec (zip-str->zip-vec zips)
           insert-result (!insert db-conn "zones"
                                  {:name name
                                   :rank rank
-                                  :active active})
+                                  :active active
+                                  :config config})
           new-zone (first (!select db-conn "zones"
                                    [:id] {:name name}))
           id (:id new-zone)]
@@ -394,14 +400,15 @@
   7:30am is represented as 450 which is (+ (* 60 7) 30)
   10:30pm is represened as 1350 which is (+ (* 60 22) 30)"
   [db-conn zone]
-  (let [{:keys [id name rank active zips]} zone]
+  (let [{:keys [id name rank active zips config]} zone]
     (if (b/valid? zone (zone-validations id))
       (let [new-zips-vec (zip-str->zip-vec zips)
             old-zips-vec (map :zips (get-all-zips-by-zone-id db-conn id))
             update-result (!update db-conn "zones"
                                    {:name name
                                     :rank rank
-                                    :active active}
+                                    :active active
+                                    :config config}
                                    {:id id})
             [old-zips new-zips _] (data/diff old-zips-vec new-zips-vec)]
         (if (:success update-result)
