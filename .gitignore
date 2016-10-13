@@ -15,3 +15,4 @@ stats.csv
 .DS_Store
 .~*
 *.xlsx
+/database/ebdb-dev-*.sql
