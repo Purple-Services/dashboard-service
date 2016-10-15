@@ -469,7 +469,12 @@
         ;; keywords that begin with numbers
         (into [] (get-all-zones-from-db (conn)))))
   ;; return all zips we will use
-  ;;(POST "/zips")
+  (GET "/zips/:zip" [zip]
+       (let [zip-result (zones/get-zip-def (conn) (str zip))]
+         (response
+          (if (nil? zip-result)
+            {}
+            (zones/get-zip-def (conn) (str zip))))))
   ;; return zcta defintions for zips
   (POST "/zctas" {body :body}
         (response
