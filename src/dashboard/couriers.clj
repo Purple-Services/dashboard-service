@@ -19,9 +19,9 @@
       {:success false
        :error (str "There is no courier with id: " id)}
       (assoc (parse-courier-zones courier)
-             :timestamp_create
+             :timestamp_created
              (/ (.getTime
-                 (:timestamp_create courier))
+                 (:timestamp_created courier))
                 1000)))))
 
 (defn include-lateness
