@@ -48,8 +48,9 @@
                                      update-user!
                                      convert-to-courier!]]
             [dashboard.zones :refer [get-zone-by-id
-                                     read-zone-strings
-                                     validate-and-update-zone!]]
+                                     update-zone!
+                                     create-zone!
+                                     get-all-zones-from-db]]
             [ring.middleware.cookies :refer [wrap-cookies]]
             [ring.middleware.json :refer [wrap-json-body wrap-json-response]]
             [ring.util.response :refer [header set-cookie response redirect]]
@@ -347,6 +348,7 @@
         (response
          (let [b (keywordize-keys body)]
            {:couriers (->> (couriers/all-couriers (conn))
+                           convert-timestamps
                            (users/include-user-data (conn))
                            (include-lateness (conn))
                            (include-os-and-app-version (conn))
@@ -449,28 +451,30 @@
        (response
         (into []
               (->> (get-zone-by-id (conn) id)
-                   (read-zone-strings)
                    list))))
   ;; update a zone's description. currently only supports
   ;; updating fuel_prices, service_fees and service_time_bracket
   (PUT "/zone" {body :body}
        (let [b (keywordize-keys body)]
          (response
-          (validate-and-update-zone! (conn) b))))
-  ;; return all zones
+          (update-zone! (conn) b))))
+  (POST "/zone" {body :body}
+        (let [b (keywordize-keys body)]
+          (response
+           (create-zone! (conn) b))))
+  ;; return all zones - not used this way anymore
   (GET "/zones" []
        (response
         ;; needed because cljs.reader/read-string can't handle
         ;; keywords that begin with numbers
-        (mapv
-         #(assoc %
-                 :fuel_prices (stringify-keys
-                               (read-string (:fuel_prices %)))
-                 :service_fees (stringify-keys
-                                (read-string (:service_fees %)))
-                 :service_time_bracket (read-string
-                                        (:service_time_bracket %)))
-         (into [] (zones/get-all-zones-from-db (conn))))))
+        (into [] (get-all-zones-from-db (conn)))))
+  ;; return all zips we will use
+  (GET "/zips/:zip" [zip]
+       (let [zip-result (zones/get-zip-def (conn) (str zip))]
+         (response
+          (if (nil? zip-result)
+            {}
+            (zones/get-zip-def (conn) (str zip))))))
   ;; return zcta defintions for zips
   (POST "/zctas" {body :body}
         (response

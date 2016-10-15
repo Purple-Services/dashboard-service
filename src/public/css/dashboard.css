@@ -82,6 +82,8 @@ body {
 .table-bordered {
     border: 1px solid #ddd !important;
 }
+
+
 .table-responsive {
     margin-top: 15px;
     border-top: none !important;
@@ -95,10 +97,9 @@ body {
 }
 
 tbody > tr.active > td {
-    background-color: #efefff !important;
-    /* border-left: 2px solid #4E4084; */
-    /* border-bottom: 2px solid #4E4084; */
+    background-color: #e5edf9 !important;
 }
+
 
 .purple-logo {
     width: 4.5em;
