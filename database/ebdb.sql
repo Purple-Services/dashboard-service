@@ -195,7 +195,6 @@ CREATE TABLE `couriers` (
   `on_duty` tinyint(1) NOT NULL DEFAULT '0',
   `connected` tinyint(1) NOT NULL DEFAULT '0',
   `busy` tinyint(1) NOT NULL DEFAULT '0',
-  `markets` varchar(4000) DEFAULT '' COMMENT 'comma-separated list of market ids that this courier is assigned to',
   `zones` mediumtext NOT NULL DEFAULT '' COMMENT 'zones they are servicing. ONLY USE ZONE NUMBERS THAT ARE DEFINED IN zones TABLE, or fatal error',
   `gallons_87` double NOT NULL DEFAULT '0',
   `gallons_91` double NOT NULL DEFAULT '0',
@@ -335,7 +334,7 @@ CREATE TABLE `sessions` (
   `source` varchar(100) DEFAULT '',
   `timestamp_created` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=2834 DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=2902 DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -499,9 +498,10 @@ CREATE TABLE `zones` (
   `name` varchar(255) NOT NULL,
   `rank` int(11) NOT NULL DEFAULT '0',
   `active` tinyint(1) NOT NULL,
+  `color` varchar(20) NOT NULL DEFAULT '#9b59b6',
   `config` text,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=128 DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=336 DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -687,4 +687,4 @@ CREATE TABLE `zones_old` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2016-09-26 15:58:56
+-- Dump completed on 2016-10-17 12:00:07
