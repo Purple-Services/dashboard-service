@@ -13,16 +13,6 @@
                                   raw-sql-update]]
             [dashboard.utils :as utils]))
 
-#_ (defn read-zone-strings
-     "Given a zone from the database, convert edn strings to clj data"
-     [zone]
-     (assoc zone
-            :fuel_prices (stringify-keys
-                          (read-string (:fuel_prices zone)))
-            :service_fees (stringify-keys
-                           (read-string (:service_fees zone)))
-            :service_time_bracket (read-string
-                                   (:service_time_bracket zone))))
 (defn format-zone
   "Given a zone, format it so that it will return proper json"
   [zone]
@@ -101,121 +91,129 @@
   [zips]
   (str "(" (s/join ", " zips) ")"))
 
-(defn existant-zips
-  "Obtain the existant zips from the database"
+(defn existent-zips
+  "Obtain the existent zips from the database"
   [db-conn zips]
-  (raw-sql-query
-   db-conn
-   [(str "SELECT zip,zones FROM `zips` "
-         "WHERE `zip` IN "
-         (mysql-zips-str zips))]))
+  (if-not (nil? zips)
+    (raw-sql-query
+     db-conn
+     [(str "SELECT zip,zones FROM `zips` "
+           "WHERE `zip` IN "
+           (mysql-zips-str zips))])
+    '()))
 
-(defn existant-zips-list
+(defn existent-zips-list
   [db-conn zips]
   "Given a list of zips, return a list of zips that exist in the db"
-  (map :zip (existant-zips db-conn zips)))
+  (map :zip (existent-zips db-conn zips)))
 
 (defn add-zips-to-zone!
   "Given a list of zips, add these zips to zone by updating the zones
   defitnition for zips that already exist and creating new zips for those that
-  are nonexistant. New zips will have the zone defition '1,<zone-id>' because
+  are nonexistent. New zips will have the zone defition '1,<zone-id>' because
   all zips must be members of the Earth zone."
   [db-conn zips zone-id]
-  (let [new-zone-string (if (= zone-id 1)
-                          "1"
-                          (str "1," zone-id))
-        ;; all zips that exist
-        existant-zips-list (existant-zips-list db-conn zips)
-        zips-diff (data/diff (set existant-zips-list) (set zips))
-        non-existant-zips (second zips-diff)
-        mysql-non-existant-zip-values (s/replace
-                                       (apply
-                                        str
-                                        (map #(str "(" "'" % "'"
-                                                   ",'" new-zone-string "'),")
-                                             non-existant-zips))
-                                       #",$"
-                                       ";")
-        non-existant-zip-insert-statement (str "INSERT INTO `zips` (zip,zones)"
-                                               " VALUES "
-                                               mysql-non-existant-zip-values)
-        ;; zips that exist, but are already assigned to
-        ;; some zones
-        assigned-current-zips (raw-sql-query
-                               db-conn
-                               [(str "SELECT zip,zones FROM `zips` "
-                                     "WHERE `zip` IN "
-                                     (mysql-zips-str zips)
-                                     "AND "
-                                     "NOT FIND_IN_SET "
-                                     "(" zone-id ",zips.zones);")])
-        assigned-current-zips-str (str
-                                   "("
-                                   (s/join ", "
-                                           (map :zip assigned-current-zips))
-                                   ")")]
-    ;; update the existant zones
-    (when (and (not= zone-id 1)
-               (not (empty? assigned-current-zips)))
-      (raw-sql-update
-       db-conn
-       (str "UPDATE `zips` SET `zones` = CONCAT(zones,'," zone-id "') "
-            "WHERE `zip` IN " assigned-current-zips-str ";")))
-    ;; add the non-existant zones
-    (when-not (empty? non-existant-zips)
-      (raw-sql-update
-       db-conn
-       non-existant-zip-insert-statement))
-    {:success true}))
+  (cond (nil? zips)
+        {:success true}
+        :else
+        (let [new-zone-string (if (= zone-id 1)
+                                "1"
+                                (str "1," zone-id))
+              ;; all zips that exist
+              existent-zips-list (existent-zips-list db-conn zips)
+              zips-diff (data/diff (set existent-zips-list) (set zips))
+              non-existent-zips (second zips-diff)
+              mysql-non-existent-zip-values (s/replace
+                                             (apply
+                                              str
+                                              (map #(str "(" "'" % "'"
+                                                         ",'" new-zone-string "'),")
+                                                   non-existent-zips))
+                                             #",$"
+                                             ";")
+              non-existent-zip-insert-statement (str "INSERT INTO `zips` (zip,zones)"
+                                                     " VALUES "
+                                                     mysql-non-existent-zip-values)
+              ;; zips that exist, but are already assigned to
+              ;; some zones
+              assigned-current-zips (raw-sql-query
+                                     db-conn
+                                     [(str "SELECT zip,zones FROM `zips` "
+                                           "WHERE `zip` IN "
+                                           (mysql-zips-str zips)
+                                           "AND "
+                                           "NOT FIND_IN_SET "
+                                           "(" zone-id ",zips.zones);")])
+              assigned-current-zips-str (str
+                                         "("
+                                         (s/join ", "
+                                                 (map :zip assigned-current-zips))
+                                         ")")]
+          ;; update the existent zones
+          (when (and (not= zone-id 1)
+                     (not (empty? assigned-current-zips)))
+            (raw-sql-update
+             db-conn
+             (str "UPDATE `zips` SET `zones` = CONCAT(zones,'," zone-id "') "
+                  "WHERE `zip` IN " assigned-current-zips-str ";")))
+          ;; add the non-existent zones
+          (when-not (empty? non-existent-zips)
+            (raw-sql-update
+             db-conn
+             non-existent-zip-insert-statement))
+          {:success true})))
 
 (defn remove-zips-from-zone!
   "Given a list of zips, remove these zips from the zone"
   [db-conn zips zone-id]
-  (if-not (= zone-id 1)
-    (let [;; we're not going to even consider zips
-          ;; that don't exist for removal as it is
-          ;; nonsense to do so
-          existant-zips (get-all-zips-by-zone-id db-conn zone-id)
-          ;;(existant-zips db-conn zips)
-          reg-match #(re-matches (re-pattern
-                                  (str "^1," zone-id "$"))
-                                 %)
-          single-zone-zips (filter #(reg-match (:zones %)) existant-zips)
-          multiple-zone-zips (filter #(not (reg-match (:zones %)))
-                                     existant-zips)
-          remove-zone (fn [zone zone-id]
-                        (s/replace zone (re-pattern (str "," zone-id)) ""))
-          modified-zones (map #(assoc %
-                                      :zones
-                                      (remove-zone (:zones %) zone-id))
-                              multiple-zone-zips)
-          modified-zones-values (s/join
-                                 ","
-                                 (map #(str "('" (:zip %) "','" (:zones %) "')")
-                                      modified-zones))
-          modify-zones-statement (str "INSERT INTO `zips` (zip,zones) VALUES "
-                                      modified-zones-values " "
-                                      "ON DUPLICATE KEY UPDATE zip=VALUES(zip),"
-                                      "zones=VALUES(zones);")
-          delete-zones-values (str "(" (s/join
-                                        ","
-                                        (map #(str "'" % "'")
-                                             (map :zip single-zone-zips)))
-                                   ")")
-          delete-zones-statement (str "DELETE FROM `zips` WHERE (zip) IN "
-                                      delete-zones-values ";")]
-      ;; when there are zips that should be mofidied
-      (when-not (empty? multiple-zone-zips)
-        (raw-sql-update
-         db-conn
-         modify-zones-statement))
-      ;; when there are zips that should be deleted
-      (when-not (empty? single-zone-zips)
-        (raw-sql-update
-         db-conn
-         delete-zones-statement))
-      {:success true}))
-  {:success false :message "You can't remove zips from zone-id = 1"})
+  (cond (= zone-id 1)
+        {:success false :message "You can't remove zips from zone-id = 1"}
+        (nil? zips)
+        {:success true}
+        :else
+        (let [;; we're not going to even consider zips
+              ;; that don't exist for removal as it is
+              ;; nonsense to do so
+              existent-zips (get-all-zips-by-zone-id db-conn zone-id)
+              ;;(existent-zips db-conn zips)
+              reg-match #(re-matches (re-pattern
+                                      (str "^1," zone-id "$"))
+                                     %)
+              single-zone-zips (filter #(reg-match (:zones %)) existent-zips)
+              multiple-zone-zips (filter #(not (reg-match (:zones %)))
+                                         existent-zips)
+              remove-zone (fn [zone zone-id]
+                            (s/replace zone (re-pattern (str "," zone-id)) ""))
+              modified-zones (map #(assoc %
+                                          :zones
+                                          (remove-zone (:zones %) zone-id))
+                                  multiple-zone-zips)
+              modified-zones-values (s/join
+                                     ","
+                                     (map #(str "('" (:zip %) "','" (:zones %) "')")
+                                          modified-zones))
+              modify-zones-statement (str "INSERT INTO `zips` (zip,zones) VALUES "
+                                          modified-zones-values " "
+                                          "ON DUPLICATE KEY UPDATE zip=VALUES(zip),"
+                                          "zones=VALUES(zones);")
+              delete-zones-values (str "(" (s/join
+                                            ","
+                                            (map #(str "'" % "'")
+                                                 (map :zip single-zone-zips)))
+                                       ")")
+              delete-zones-statement (str "DELETE FROM `zips` WHERE (zip) IN "
+                                          delete-zones-values ";")]
+          ;; when there are zips that should be mofidied
+          (when-not (empty? multiple-zone-zips)
+            (raw-sql-update
+             db-conn
+             modify-zones-statement))
+          ;; when there are zips that should be deleted
+          (when-not (empty? single-zone-zips)
+            (raw-sql-update
+             db-conn
+             delete-zones-statement))
+          {:success true})))
 
 
 #_ (def zone-validations
@@ -403,7 +401,7 @@
   (let [{:keys [id name rank active zips config]} zone]
     (if (b/valid? zone (zone-validations id))
       (let [new-zips-vec (zip-str->zip-vec zips)
-            old-zips-vec (map :zips (get-all-zips-by-zone-id db-conn id))
+            old-zips-vec (map :zip (get-all-zips-by-zone-id db-conn id))
             update-result (!update db-conn "zones"
                                    {:name name
                                     :rank rank

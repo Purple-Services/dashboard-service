@@ -116,7 +116,8 @@
   (with-redefs [common.config/base-url test-base-url]
     (t)))
 
-(use-fixtures :once with-server with-browser with-redefs-fixture)
+(use-fixtures :once with-server with-browser with-redefs-fixture
+  setup-ebdb-test-for-conn-fixture)
 (use-fixtures :each clear-and-populate-test-database-fixture)
 
 ;; beging fns for testing at the repl
@@ -391,7 +392,8 @@
                active?)
     (click zone-form-active?)))
 
-(deftest zones-test
+;; turned off, doesn't really test anything yet
+#_ (deftest zones-test
   (let [dash-user {:email "foo@bar.com"
                    :password "foobar"
                    :full-name "Foo Bar"}
