@@ -175,13 +175,22 @@
               ;; that don't exist for removal as it is
               ;; nonsense to do so
               existent-zips (get-all-zips-by-zone-id db-conn zone-id)
-              ;;(existent-zips db-conn zips)
+              ;; need to consider ONLY the zips that are removed,
+              ;; not all of them
+              zips-to-remove (filter #(contains?
+                                       (set (filter
+                                             ;; this filters out
+                                             ;; any nils in zips
+                                             (comp not nil?)
+                                             zips))
+                                       (:zip %))
+                                     existent-zips)
               reg-match #(re-matches (re-pattern
                                       (str "^1," zone-id "$"))
                                      %)
-              single-zone-zips (filter #(reg-match (:zones %)) existent-zips)
+              single-zone-zips (filter #(reg-match (:zones %)) zips-to-remove)
               multiple-zone-zips (filter #(not (reg-match (:zones %)))
-                                         existent-zips)
+                                         zips-to-remove)
               remove-zone (fn [zone zone-id]
                             (s/replace zone (re-pattern (str "," zone-id)) ""))
               modified-zones (map #(assoc %

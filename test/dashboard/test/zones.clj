@@ -57,7 +57,7 @@
                                    los-angeles
                                    :zips "90211,90212,90213,90214,90215"))
       (is (nil? (db/!select (db/conn) "zips" [:zip :zones] {:zip "90210"})))
-      ;; but 90211 still exists right?
+      ;; but 90211 still exists 
       (is (first (db/!select (db/conn) "zips" [:zip :zones] {:zip "90211"}))))))
 
 
@@ -96,8 +96,21 @@
         el-cajon (first (db/!select db-conn "zones" ["*"] {:name "El Cajon"}))]
     ;; La Jolla should not have nil zips
     (is (not (nil? (:zips (zones/get-zone-by-name db-conn "La Jolla")))))
-    ;; but neither should San Dieo
-    (is (not (nil? (:zips (zones/get-zone-by-name db-conn "San Diego")))))))
+    ;; but neither should San Diego
+    (is (not (nil? (:zips (zones/get-zone-by-name db-conn "San Diego")))))
+    ;; remove 92131 from La Jolla
+    (zones/update-zone!
+     db-conn
+     (assoc (zones/get-zone-by-name db-conn "La Jolla")
+            :zips "92037, 92108, 92111, 92117, 92121, 92122, 92123, 92126"))
+    ;; La Jolla should not have nil zips
+    (is (not (nil? (:zips (zones/get-zone-by-name db-conn "La Jolla")))))
+    ;; La Jolla should have one less zip
+    (is (= "92037,92108,92111,92117,92121,92122,92123,92126"
+           (:zips (zones/get-zone-by-name db-conn "La Jolla"))))
+    ;; And San Diego should not be affected
+    (is (not (nil? (:zips (zones/get-zone-by-name db-conn "San Diego")))))
+    ))
 
 
 (deftest manually-created-zips
@@ -109,11 +122,21 @@
         zips-insert-sql (db-tools/process-sql "database/zips-test.sql")
         _ (with-connection (db/conn) (apply do-commands zips-insert-sql))
         ]
-    ;; update San Diego
+    ;; update San Diego's config
     (zones/update-zone! db-conn
                         (assoc (zones/get-zone-by-name db-conn "San Diego")
                                :config (str {:manually-closed? true})))
     ;; La Jolla should not have nil zips
     (is (not (nil? (:zips (zones/get-zone-by-name db-conn "La Jolla")))))
     ;; but neither should San Dieo
+    (is (not (nil? (:zips (zones/get-zone-by-name db-conn "San Diego")))))
+    ;; remove 92131 from La Jolla
+    (zones/update-zone!
+     db-conn
+     (assoc (zones/get-zone-by-name db-conn "La Jolla")
+            :zips "92037, 92108, 92111, 92117, 92121, 92122, 92123, 92126"))
+    ;; La Jolla should have one less zip
+    (is (= "92037,92108,92111,92117,92121,92122,92123,92126"
+           (:zips (zones/get-zone-by-name db-conn "La Jolla"))))
+    ;; And San Diego should not be affected
     (is (not (nil? (:zips (zones/get-zone-by-name db-conn "San Diego")))))))
