@@ -90,7 +90,7 @@
   [db-conn zone-id]
   (let [zips (raw-sql-query
               db-conn
-              [(str "SELECT zip,zones "
+              [(str "SELECT zip, zones "
                     "FROM zips "
                     "WHERE FIND_IN_SET (" zone-id ",zips.zones);")])]
     zips))
@@ -168,6 +168,24 @@
        non-existant-zip-insert-statement))
     {:success true}))
 
+(defn remove-zone-from-zip
+  [db-conn zip-row zone-id]
+  (let [zip (:zip zip-row)
+        zones (map (comp #(Integer. %) s/trim) (s/split (:zones zip-row) #","))
+        edited-zones (remove #(= % zone-id) zones)]
+    (!update db-conn
+             "zips"
+             {:zones (s/join "," edited-zones)}
+             {:zip zip})))
+
+(defn remove-zone-from-all-but-zips
+  [db-conn zips zone-id]
+  (run! #(remove-zone-from-zip db-conn % zone-id)
+        (filter #(not (in? zips (:zip %)))
+                (get-all-zips-by-zone-id db-conn zone-id))))
+
+;; (remove-zone-from-zips (conn) ["90004"] 2)
+
 (defn remove-zips-from-zone!
   "Given a list of zips, remove these zips from the zone"
   [db-conn zips zone-id]
@@ -183,11 +201,11 @@
           single-zone-zips (filter #(reg-match (:zones %)) existant-zips)
           multiple-zone-zips (filter #(not (reg-match (:zones %)))
                                      existant-zips)
-          remove-zone (fn [zone zone-id]
-                        (s/replace zone (re-pattern (str "," zone-id)) ""))
+          remove-zones (fn [zones zone-id]
+                         (s/replace zones (re-pattern (str "," zone-id)) ""))
           modified-zones (map #(assoc %
                                       :zones
-                                      (remove-zone (:zones %) zone-id))
+                                      (remove-zones (:zones %) zone-id))
                               multiple-zone-zips)
           modified-zones-values (s/join
                                  ","
@@ -214,8 +232,8 @@
         (raw-sql-update
          db-conn
          delete-zones-statement))
-      {:success true}))
-  {:success false :message "You can't remove zips from zone-id = 1"})
+      {:success true})
+    {:success false :message "You can't remove zips from zone-id = 1"}))
 
 
 #_ (def zone-validations
@@ -403,19 +421,18 @@
   (let [{:keys [id name rank active zips config]} zone]
     (if (b/valid? zone (zone-validations id))
       (let [new-zips-vec (zip-str->zip-vec zips)
-            old-zips-vec (map :zips (get-all-zips-by-zone-id db-conn id))
             update-result (!update db-conn "zones"
                                    {:name name
                                     :rank rank
                                     :active active
                                     :config config}
-                                   {:id id})
-            [old-zips new-zips _] (data/diff old-zips-vec new-zips-vec)]
+                                   {:id id})]
         (if (:success update-result)
           (do
-            ;; update the zips in the zone
-            (remove-zips-from-zone! db-conn old-zips id)
-            (add-zips-to-zone! db-conn new-zips id)
+            ;; remove this zone from all zips
+            (remove-zone-from-all-but-zips db-conn zips id)
+            ;; add this zone to the desired zips
+            (add-zips-to-zone! db-conn new-zips-vec id)
             ;; return the result with id of zone
             (assoc update-result :id id))
           update-result))
