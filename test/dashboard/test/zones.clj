@@ -2,6 +2,7 @@
   (:require [clojure.java.jdbc :refer [with-connection do-commands]]
             [clojure.test :refer [is deftest testing use-fixtures]]
             [common.db :as db]
+            [common.zones :refer [get-zip-def-not-validated]]
             [dashboard.db :refer [raw-sql-update]]
             [dashboard.test.db-tools :as db-tools]
             [dashboard.zones :as zones]))
@@ -135,7 +136,18 @@
       (is (= "92037,92108,92111,92117,92121,92122,92123,92126"
              (:zips (zones/get-zone-by-name db-conn "La Jolla"))))
       (is (= "91901,91910,91911,91913,91932,91935,91941,91942,91945,91950,91977,91978,92007,92008,92009,92010,92011,92014,92019,92020,92021,92024,92037,92040,92054,92067,92071,92075,92091,92101,92102,92103,92104,92105,92106,92107,92108,92109,92110,92111,92113,92114,92115,92116,92117,92119,92120,92121,92122,92123,92124,92126,92129,92130,92131,92140,92154"
-             (:zips (zones/get-zone-by-name db-conn "San Diego")))))))
+             (:zips (zones/get-zone-by-name db-conn "San Diego")))))
+    (testing "A zip will return the proper parameters, even upon deletion from one zone"
+      (is (= ["Earth" "San Diego" "La Jolla"]
+             (:zone-names (get-zip-def-not-validated db-conn (str "92126")))))
+      ;; remove 92126 from San Diego
+      (zones/update-zone!
+       db-conn
+       (assoc (zones/get-zone-by-name db-conn "San Diego")
+              :zips "91901,91910,91911,91913,91932,91935,91941,91942,91945,91950,91977,91978,92007,92008,92009,92010,92011,92014,92019,92020,92021,92024,92037,92040,92054,92067,92071,92075,92091,92101,92102,92103,92104,92105,92106,92107,92108,92109,92110,92111,92113,92114,92115,92116,92117,92119,92120,92121,92122,92123,92124,,92129,92130,92131,92140,92154" ))
+      (is (= ["Earth" "La Jolla"]
+             (:zone-names (get-zip-def-not-validated db-conn (str "92126")))))
+      )))
 
 
 (deftest manually-created-zips
@@ -164,4 +176,29 @@
     (is (= "92037,92108,92111,92117,92121,92122,92123,92126"
            (:zips (zones/get-zone-by-name db-conn "La Jolla"))))
     ;; And San Diego should not be affected
-    (is (not (nil? (:zips (zones/get-zone-by-name db-conn "San Diego")))))))
+    (is (not (nil? (:zips (zones/get-zone-by-name db-conn "San Diego")))))
+    (testing "A zip will return the proper parameters, even upon deletion from one zone"
+      (is (= ["Earth" "San Diego" "La Jolla"]
+             (:zone-names (get-zip-def-not-validated db-conn (str "92126")))))
+      ;; remove 92126 from San Diego
+      (zones/update-zone!
+       db-conn
+       (assoc (zones/get-zone-by-name db-conn "San Diego")
+              :zips "91901,91910,91911,91913,91932,91935,91941,91942,91945,91950,91977,91978,92007,92008,92009,92010,92011,92014,92019,92020,92021,92024,92037,92040,92054,92067,92071,92075,92091,92101,92102,92103,92104,92105,92106,92107,92108,92109,92110,92111,92113,92114,92115,92116,92117,92119,92120,92121,92122,92123,92124,,92129,92130,92131,92140,92154" ))
+      (is (= ["Earth" "La Jolla"]
+             (:zone-names (get-zip-def-not-validated db-conn (str "92126")))))
+      ;; put the zip back into San Diego, 92126 still returns proper results
+      (zones/update-zone!
+       db-conn
+       (assoc (zones/get-zone-by-name db-conn "San Diego")
+              :zips "91901,91910,91911,91913,91932,91935,91941,91942,91945,91950,91977,91978,92007,92008,92009,92010,92011,92014,92019,92020,92021,92024,92037,92040,92054,92067,92071,92075,92091,92101,92102,92103,92104,92105,92106,92107,92108,92109,92110,92111,92113,92114,92115,92116,92117,92119,92120,92121,92122,92123,92124,92129,92130,92131,92140,92154,92126"))
+      (is (= ["Earth" "San Diego" "La Jolla"]
+             (:zone-names (get-zip-def-not-validated db-conn (str "92126")))))
+      ;; remove the zip from La Jolla, 92126 still returns proper results
+      (zones/update-zone!
+       db-conn
+       (assoc (zones/get-zone-by-name db-conn "La Jolla")
+              :zips "92037,92108,92111,92117,92121,92122,92123,92131"))
+      (is (= ["Earth" "San Diego"]
+             (:zone-names (get-zip-def-not-validated db-conn (str "92126"))))))
+    ))
