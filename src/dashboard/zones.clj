@@ -105,7 +105,8 @@
 (defn existent-zips-list
   [db-conn zips]
   "Given a list of zips, return a list of zips that exist in the db"
-  (map :zip (existent-zips db-conn zips)))
+  (map :zip (existent-zips db-conn
+                           (filter (comp not nil?) zips))))
 
 (defn add-zips-to-zone!
   "Given a list of zips, add these zips to zone by updating the zones
@@ -116,7 +117,9 @@
   (cond (nil? zips)
         {:success true}
         :else
-        (let [new-zone-string (if (= zone-id 1)
+        (let [;; filter out all nil values from zips
+              zips (filter (comp not nil?) zips)
+              new-zone-string (if (= zone-id 1)
                                 "1"
                                 (str "1," zone-id))
               ;; all zips that exist
