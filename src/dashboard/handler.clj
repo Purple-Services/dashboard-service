@@ -194,7 +194,7 @@
     :permissions ["view-zones"]}
    {:uri "/zctas"
     :method "POST"
-    :permissions ["view-zones"]}
+    :permissions ["create-zones"]}
    ;;!! orders
    {:uri "/order/:id"
     :method "GET"
