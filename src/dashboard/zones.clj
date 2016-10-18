@@ -195,7 +195,9 @@
               multiple-zone-zips (filter #(not (reg-match (:zones %)))
                                          zips-to-remove)
               remove-zone (fn [zone zone-id]
-                            (s/replace zone (re-pattern (str "," zone-id)) ""))
+                            (s/join ","
+                                    (sort (filter (partial not= (str zone-id))
+                                                  (s/split zone #",")))))
               modified-zones (map #(assoc %
                                           :zones
                                           (remove-zone (:zones %) zone-id))
