@@ -1,0 +1,3 @@
+#!/bin/bash
+filename=$1
+mysql -u purplemaster -plocalpurpledevelopment2015 ebdb_dev < $filename

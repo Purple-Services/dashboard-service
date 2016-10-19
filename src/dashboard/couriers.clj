@@ -3,9 +3,10 @@
             [bouncer.validators :as v]
             [clojure.string :as s]
             [clojure.edn :as edn]
-            [common.couriers :refer [process-courier]]
+            [common.couriers :refer [parse-courier-zones]]
             [common.db :refer [!select !update conn]]
-            [common.util :refer [split-on-comma]]))
+            [common.util :refer [split-on-comma]]
+            [dashboard.utils :as utils]))
 
 (defn get-by-id
   "Get a courier from db by courier's id"
@@ -17,7 +18,11 @@
     (if (empty? courier)
       {:success false
        :error (str "There is no courier with id: " id)}
-      (process-courier courier))))
+      (assoc (parse-courier-zones courier)
+             :timestamp_created
+             (/ (.getTime
+                 (:timestamp_created courier))
+                1000)))))
 
 (defn include-lateness
   "Given a courier map m, return a map with :lateness included using
@@ -96,14 +101,6 @@
                     :arn_endpoint (:arn_endpoint user-courier))))
          m)))
 
-(defn edn-read?
-  "Attempt to read x with edn/read-string, return true if x can be read,false
-  otherwise "
-  [x]
-  (try (edn/read-string x)
-       true
-       (catch Exception e false)))
-
 (def courier-validations
   {:zones [;; verify that the zone assignments can be read as edn
            ;; must be done first to prevent throwing an error
@@ -111,7 +108,7 @@
            [#(every? identity
                      (->> %
                           split-on-comma
-                          (map edn-read?)))
+                          (map utils/edn-read?)))
             :message (str "Zones assignments must be "
                           "comma-separated integer "
                           "(whole number) values!") ]

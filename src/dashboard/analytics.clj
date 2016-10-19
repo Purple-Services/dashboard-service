@@ -4,6 +4,7 @@
                                mysql-escape-str]]
             [common.util :refer [in?]]
             [common.vin :refer [get-info-batch]]
+            [dashboard.db :as db]
             [dashboard.schedules :refer [schedules-by-courier-id]]
             [clojure.core.matrix :as mat]
             [clojure.java.jdbc :as sql]
@@ -225,13 +226,7 @@
         ]
     (memo-clear! get-first-order-by-user-memoized)))
 
-(defn raw-sql-query
-  "Given a raw query-vec, return the results"
-  [db-conn query-vec]
-  (sql/with-connection db-conn
-    (sql/with-query-results results
-      query-vec
-      (doall results))))
+(def raw-sql-query db/raw-sql-query)
 
 (defn sql-results
   "Obtain results for sql string"
