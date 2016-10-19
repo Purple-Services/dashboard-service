@@ -77,7 +77,10 @@
                            (filter #(in? (:zips %) zip) zones))
         get-market-by-zip (fn [zip]
                             (first (filter #(= 100 (:rank %))
-                                           (get-zones-by-zip zip))))]
+                                           (get-zones-by-zip zip))))
+        get-submarket-by-zip (fn [zip]
+                               (first (filter #(= 1000 (:rank %))
+                                              (get-zones-by-zip zip))))]
     (map #(assoc %
                  :market-color
                  (:color
@@ -86,6 +89,10 @@
                  :market
                  (:name
                   (get-market-by-zip
+                   (:address_zip %)))
+                 :submarket
+                 (:name
+                  (get-submarket-by-zip
                    (:address_zip %)))
                  :zones
                  (map :id
