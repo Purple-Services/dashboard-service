@@ -11,9 +11,9 @@
             [common.couriers :as couriers]
             [common.users :as users]
             [common.util :refer [in? map->java-hash-map split-on-comma]]
-            [common.zones :refer [get-all-zones-from-db
-                                  get-zones]]
-            [common.orders :as orders]))
+            [common.zones :refer [get-zip-def order->zones]]
+            [common.orders :as orders]
+            [dashboard.zones :refer [get-all-zones-from-db]]))
 
 (def orders-select
   [:id :lat :lng :status :gallons :gas_type
@@ -70,19 +70,27 @@
   "Given a vector of orders, assoc the zone and zone_color associated with the
   order"
   [db-conn orders]
-  (let [zones (get-zones db-conn)
-        get-zone-by-zip-code (fn [zip-code]
-                               (first (filter #(in? (:zip_codes %) zip-code)
-                                              zones)))]
+  (let [zones (map #(assoc %
+                           :zips (map s/trim (s/split (:zips %) #",")))
+                   (get-all-zones-from-db db-conn))
+        get-zones-by-zip (fn [zip]
+                           (filter #(in? (:zips %) zip) zones))
+        get-market-by-zip (fn [zip]
+                            (first (filter #(= 100 (:rank %))
+                                           (get-zones-by-zip zip))))]
     (map #(assoc %
-                 :zone-color
+                 :market-color
                  (:color
-                  (get-zone-by-zip-code
+                  (get-market-by-zip
                    (:address_zip %)))
-                 :zone
-                 (:id
-                  (get-zone-by-zip-code
-                   (:address_zip %))))
+                 :market
+                 (:name
+                  (get-market-by-zip
+                   (:address_zip %)))
+                 :zones
+                 (map :id
+                      (get-zones-by-zip
+                       (:address_zip %))))
          orders)))
 
 (defn include-was-late
@@ -101,13 +109,12 @@
                          (:target_time_end %)))))
        orders))
 
+;; currently only works for 1 order in orders
 (defn include-eta
   "Given a vector of orders, assoc the etas for active couriers that are
   associated with the order"
   [db-conn orders]
-  (let [all-couriers (->> (!select db-conn "couriers" ["*"] {})
-                          ;; remove chriscourier@test.com
-                          (remove #(in? ["9eadx6i2wCCjUI1leBBr"] (:id %))))
+  (let [all-couriers (!select db-conn "couriers" ["*"] {})
         users-by-id  (->> (!select db-conn "users"
                                    [:id :name :email :phone_number :os
                                     :app_version :stripe_default_card
@@ -118,6 +125,7 @@
         id->name #(:name (first (get users-by-id %)))
         couriers-by-id (into {} (map (juxt (comp keyword :id) identity)
                                      all-couriers))
+        order-zones (order->zones db-conn (first orders))
         dist-map (compute-distance
                   {"orders" (->> orders
                                  (filter #(in? ["unassigned"
@@ -131,18 +139,16 @@
                                                   (s/split #"\||\s")
                                                   (->> (remove s/blank?)
                                                        (apply hash-map)
-                                                       (fmap read-string)))))
+                                                       (fmap read-string)))
+                                              :zones order-zones))
                                  (map (juxt :id stringify-keys))
                                  (into {}))
-                   "couriers" (->> (!select db-conn
-                                            "couriers"
-                                            [:id :lat :lng :last_ping
-                                             :connected :zones]
-                                            {:active true
-                                             :on_duty true})
-                                   (map #(update-in % [:zones]
-                                                    split-on-comma))
-                                   (map #(assoc % :assigned_orders []))
+                   "couriers" (->> (couriers/get-couriers db-conn
+                                                          :where {:active true
+                                                                  :on_duty true})
+                                   (filter #(some (:zones %) order-zones))
+                                   (map #(assoc % :zones (apply list (:zones %))))
+                                   (map #(assoc % :assigned_orders [])) ; legacy
                                    (map (juxt :id stringify-keys))
                                    (into {}))})]
     (map #(assoc %  :etas (if-let [this-dist-map (get dist-map (:id %))]
