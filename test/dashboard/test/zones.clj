@@ -224,7 +224,7 @@
   (get-in (second validation-map)
           (vec (concat [:bouncer.core/errors] ks))))
 
-(deftest new-zone-validations
+(deftest new-zone-hour-validations
   (testing "A valid zip will return as valid with no errors"
     (is (b/valid?  valid-zone
                    zones/new-zone-validations)))
@@ -312,11 +312,11 @@
                             (dissoc (:config valid-zone)
                                     :hours)) zones/new-zone-validations))))
 
-(deftest zone-validations
+(deftest zone-hour-validations
   (let [db-conn (db/conn)]
     ;; setup the earth
     (create-earth-zone! db-conn)
-    ;; add Los Angeles
+    ;; add FooBar
     (zones/create-zone! db-conn
                         (zone->zone-config-str valid-zone))
     (let [foobar (zones/get-zone-by-name db-conn "FooBar")
@@ -408,3 +408,38 @@
                                 (dissoc (:config valid-zone)
                                         :hours)) (zones/zone-validations id))))
       )))
+
+(deftest zone-id-name-validations
+  (let [db-conn (db/conn)]
+    ;; setup the earth
+    (create-earth-zone! db-conn)
+    ;; add FooBar
+    (zones/create-zone! db-conn
+                        (zone->zone-config-str valid-zone))
+    (let [foobar (zones/get-zone-by-name db-conn "FooBar")]
+      (testing "A zone can't be updated with the wrong id"
+        (is (= '("That zone doesn't yet exist, create it first")
+               (get-bouncer-error
+                (:validation (zones/update-zone! db-conn (assoc foobar
+                                                                :id -1)))
+                [:id]))))
+      (testing "Zones can't be created with a name that already exists"
+        (is (= '("Name is already in use")
+               (get-bouncer-error
+                (:validation (zones/create-zone!
+                              db-conn (zone->zone-config-str
+                                       (assoc valid-zone
+                                              :name "FooBar"))))
+                [:name]))))
+      (testing "A zone can't be updated to a name that already exists"
+        (zones/create-zone! db-conn (zone->zone-config-str
+                                     (assoc valid-zone
+                                            :name "BazQux")))
+        (let [bazqux (zones/get-zone-by-name db-conn "BazQux")]
+          (is (= '("Name already exists! Please use a unique zone name")
+                 (get-bouncer-error
+                  (:validation (zones/update-zone!
+                                db-conn (zone->zone-config-str
+                                         (assoc bazqux
+                                                :name "FooBar"))))
+                  [:name]))))))))

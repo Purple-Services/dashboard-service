@@ -331,7 +331,7 @@
 (defn zone-exists?
   "Does the zone with id exist?"
   [name id]
-  (boolean (not (nil? (get-zone-by-id (conn) id)))))
+  (boolean (not (nil? (!select (conn) "zones" [:id] {:id -1})))))
 
 (defn pre-validator
   "Add a pre condition to a vector of validators"
