@@ -1,7 +1,7 @@
 (ns dashboard.test.zones
   (:require [bouncer.core :as b]
             [clojure.java.jdbc :refer [with-connection do-commands]]
-            [clojure.test :refer [is deftest testing use-fixtures]]
+            [clojure.test :refer [is deftest testing use-fixtures run-tests]]
             [common.db :as db]
             [common.zones :refer [get-zip-def-not-validated]]
             [dashboard.db :refer [raw-sql-update]]
@@ -45,12 +45,10 @@
                          :active true
                          :zips "90210,90211,90212,90213,90214,90215"})
     ;; is 90210 assigned to only Earth and Los Angeles?
-    (let [los-angeles (first
-                       (db/!select db-conn "zones" ["*"] {:name "Los Angeles"}))
+    (let [los-angeles (zones/get-zone-by-name db-conn "Los Angeles")
           los-angeles-id (:id los-angeles)
           _ (zones/create-zone! db-conn
-                                {:name ""})
-          ]
+                                {:name ""})]
       (is (= (:zones (first (db/!select db-conn "zips" [:zip :zones]
                                         {:zip "90210"})))
              (str "1," los-angeles-id)))
@@ -80,14 +78,14 @@
                                                  :constrain-num-one-hour? true,
                                                  :time-choices {:0 60, :1 180, :2 300},
                                                  :delivery-fee {60 599, 180 399, 300 299}})})
-        san-diego (first (db/!select db-conn "zones" ["*"] {:name "San Diego"}))
+        san-diego (zones/get-zone-by-name db-conn "San Diego")
         ;; create La Jolla
         _ (zones/create-zone! db-conn {:name "La Jolla"
                                        :rank 1000
                                        :active true
                                        :zips "92037,92108,92111,92117,92121,92122,92123,92126,92131"
                                        :config (str {:manually-closed? false})})
-        la-jolla (first (db/!select db-conn "zones" ["*"] {:name "La Jolla"}))
+        la-jolla (zones/get-zone-by-name db-conn "La Jolla")
         ;; create El Cajon
         _ (zones/create-zone! db-conn {:name "El Cajon"
                                        :rank 100
@@ -95,7 +93,7 @@
                                        :zips "91901,91935,91941,91942,91945,91977,91978,92019,92020,92021,92040,92071,92114,92115,92119,92120,92124"
 
                                        :config (str {:manually-closed? false})})
-        el-cajon (first (db/!select db-conn "zones" ["*"] {:name "El Cajon"}))]
+        el-cajon (zones/get-zone-by-name db-conn "El Cajon")]
     (testing "A zone's config man be modified without affecting other zones"
       ;; update San Diego's config
       (zones/update-zone! db-conn
