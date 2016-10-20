@@ -330,7 +330,7 @@
 
 (defn zone-exists?
   "Does the zone with id exist?"
-  [id]
+  [name id]
   (boolean (not (nil? (get-zone-by-id (conn) id)))))
 
 (defn pre-validator
@@ -343,7 +343,7 @@
     validators)))
 
 (defn zone-validations [& [id]]
-  {:id   [[zone-exists?
+  {:id   [[zone-exists? id
            :message "That zone doesn't yet exist, create it first"]]
    :name [[name-available-or-new-name? id
            :message "Name already exists! Please use a unique zone name"]
@@ -409,60 +409,38 @@
         (dissoc :id))))
 
 (defn create-zone!
-  "Given a new-zone map, validate it. If valid, create zone else return the
+  "Given a zone map, validate it. If valid, create zone else return the
   bouncer error map."
-  [db-conn new-zone]
-  (if (b/valid? new-zone new-zone-validations)
-    (let [{:keys [name rank active zips config]} new-zone
-          zips-vec (zip-str->zip-vec zips)
-          insert-result (!insert db-conn "zones"
-                                 {:name name
-                                  :rank rank
-                                  :active active
-                                  :config config})
-          new-zone (first (!select db-conn "zones"
-                                   [:id] {:name name}))
-          id (:id new-zone)]
-      (if (:success insert-result)
-        (do
-          ;; add the zips
-          (add-zips-to-zone! db-conn zips-vec id)
-          ;; return a result
-          (assoc insert-result :id id))
-        insert-result))
-    {:success false
-     :validation (b/validate new-zone new-zone-validations)}))
+  [db-conn zone]
+  (let [{:keys [name rank active zips config]} zone
+        new-zone (assoc zone :config (edn/read-string config))]
+    (if (b/valid? new-zone new-zone-validations)
+      (let [zips-vec (zip-str->zip-vec zips)
+            insert-result (!insert db-conn "zones"
+                                   {:name name
+                                    :rank rank
+                                    :active active
+                                    :config config})
+            new-zone (first (!select db-conn "zones"
+                                     [:id] {:name name}))
+            id (:id new-zone)]
+        (if (:success insert-result)
+          (do
+            ;; add the zips
+            (add-zips-to-zone! db-conn zips-vec id)
+            ;; return a result
+            (assoc insert-result :id id))
+          insert-result))
+      {:success false
+       :validation (b/validate new-zone new-zone-validations)})))
 
 (defn update-zone!
   "Given a zone map, validate it. If valid, update zone else return the
-  bouncer error map.
-
-  Update fields are fuel_prices, service_fees and service_time_bracket
-
-  name is a string
-
-  rank is an integer with a value between 1 and 10000
-
-  active? is a boolean
-
-  fuel-prices is an edn string map of the format
-  '{:87 <integer cents> :91 <integer cents>}'.
-
-  service-fees is an edn string map of the format
-  '{:60 <integer cents> :180 <integer cents> :300 <integer cents>}'.
-
-  service-time-bracket is an edn string vector of the format
-  '[<service-start> <service-end>]' where <service-start> and <service-end>
-  are integer values of the total minutes elapsed in a day at a particular
-  time.
-
-  ex:
-  The vector [450 1350] represents the time bracket 7:30am-10:30pm where
-  7:30am is represented as 450 which is (+ (* 60 7) 30)
-  10:30pm is represened as 1350 which is (+ (* 60 22) 30)"
+  bouncer error map."
   [db-conn zone]
-  (let [{:keys [id name rank active zips config]} zone]
-    (if (b/valid? zone (zone-validations id))
+  (let [{:keys [id name rank active zips config]} zone
+        updated-zone (assoc zone :config (edn/read-string config))]
+    (if (b/valid? updated-zone (zone-validations id))
       (let [new-zips-vec (zip-str->zip-vec zips)
             old-zips-vec (map :zip (get-all-zips-by-zone-id db-conn id))
             update-result (!update db-conn "zones"
@@ -481,4 +459,4 @@
             (assoc update-result :id id))
           update-result))
       {:success false
-       :validation (b/validate zone (zone-validations id))})))
+       :validation (b/validate updated-zone (zone-validations id))})))
