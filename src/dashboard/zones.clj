@@ -330,8 +330,8 @@
 
 (defn zone-exists?
   "Does the zone with id exist?"
-  [name id]
-  (boolean (not (nil? (!select (conn) "zones" [:id] {:id -1})))))
+  [id]
+  (boolean (not (nil? (!select (conn) "zones" [:id] {:id id})))))
 
 (defn pre-validator
   "Add a pre condition to a vector of validators"
@@ -343,7 +343,7 @@
     validators)))
 
 (defn zone-validations [& [id]]
-  {:id   [[zone-exists? id
+  {:id   [[zone-exists?
            :message "That zone doesn't yet exist, create it first"]]
    :name [[name-available-or-new-name? id
            :message "Name already exists! Please use a unique zone name"]
