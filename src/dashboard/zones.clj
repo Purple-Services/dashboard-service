@@ -333,6 +333,15 @@
   [id]
   (boolean (not (nil? (get-zone-by-id (conn) id)))))
 
+(defn pre-validator
+  "Add a pre condition to a vector of validators"
+  [validators pre]
+  (into
+   []
+   (map
+    #(into [] (concat % [:pre pre]))
+    validators)))
+
 (defn zone-validations [& [id]]
   {:id   [[zone-exists?
            :message "That zone doesn't yet exist, create it first"]]
@@ -342,13 +351,53 @@
           [v/string :message "Name must be a string"]]
    :rank [[v/required :message "Rank can not be blank!"]
           [v/integer :message "Rank must be a whole number"]
-          [v/in-range [1 10000] :message
+          [v/in-range [2 10000] :message
            "Rank must be between 1 and 10000"]]
    :active [[v/required :message "Active must be present"]
             [v/boolean :message "Active must be either true or false"]]
    :zips [[v/required :message "A zone must have zip codes associated with it"]
           [zips-valid? :message (str "You must provide 5-digit zip codes "
-                                     "separated by a commas")]]})
+                                     "separated by a commas")]]
+   [:config :hours] (pre-validator
+                     [[vector?
+                       :message (str "Hours must be in vector format.")]
+                      [(partial every?
+                                (partial every?
+                                         #(every? integer? %)))
+                       :message
+                       "Hours must be given in integer format"]
+                      [(partial every?
+                                (partial every?
+                                         #(every? (fn [x]
+                                                    (v/in-range x [0 1439]))
+                                                  %)))
+                       :message
+                       "Hours must be within the range of 12:00AM-11:59 PM"]
+                      [(partial every?
+                                (partial every?
+                                         #(<= (first %) (second %))))
+                       :message
+                       "Opening Hour must occur before Closing Hour"]
+                      [#(>= (count %) 7)
+                       :message
+                       "Too few days submitted. Hours for M-Su must be included"]
+                      [#(>= 7 (count %))
+                       :message
+                       "Too many days submitted. Only M-Su can be included"]
+                      [(partial every?
+                                (partial every?
+                                         #(and (vector? %)
+                                               (= 2 (count %))
+                                               (every? integer? %)
+                                               (every? (fn [x]
+                                                         (v/in-range x [0 1440]))
+                                                       %)
+                                               (<= (first %) (second %)))))
+                       :message
+                       "Hours have been incorrectly formatted"]]
+                     (comp not nil? #(get-in % [:config :hours])))
+
+   })
 
 (def new-zone-validations
   (let [zone-validations (zone-validations)]

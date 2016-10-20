@@ -1,5 +1,6 @@
 (ns dashboard.test.zones
-  (:require [clojure.java.jdbc :refer [with-connection do-commands]]
+  (:require [bouncer.core :as b]
+            [clojure.java.jdbc :refer [with-connection do-commands]]
             [clojure.test :refer [is deftest testing use-fixtures]]
             [common.db :as db]
             [common.zones :refer [get-zip-def-not-validated]]
@@ -202,3 +203,94 @@
       (is (= ["Earth" "San Diego"]
              (:zone-names (get-zip-def-not-validated db-conn (str "92126"))))))
     ))
+
+(def valid-zone {:name "FooBar"
+                 :rank 100
+                 :active true
+                 :zips "90210,90211,90212"
+                 :config {:hours [[[450 1350]]
+                                  [[450 1350]]
+                                  [[450 1350]]
+                                  [[450 1350]]
+                                  [[450 1350]]
+                                  [[450 1350]]
+                                  [[450 1350]]]}})
+
+(defn get-bouncer-error
+  [validation-map ks]
+  (get-in (second validation-map)
+          (vec (concat [:bouncer.core/errors] ks))))
+
+(deftest zone-validations
+  (testing "A valid zip will return as valid with no errors"
+    (is (b/valid? valid-zone zones/new-zone-validations)))
+  (testing "Invalid hours in config are caught properly"
+    ;; garbage given for minutes
+    (is (= '("Hours must be given in integer format")
+           (get-bouncer-error
+            (b/validate (assoc-in  valid-zone [:config :hours]
+                                   [[[450 1350]]
+                                    [["foo" 1350]]
+                                    [[450 1350]]
+                                    [[450 1350]]
+                                    [[450 1350]]
+                                    [[450 1350]]
+                                    [[450 1350]]])
+                        zones/new-zone-validations)
+            [:config :hours])))
+    ;; minute counts outside of 0 1440
+    (is (= '("Hours must be within the range of 12:00AM-11:59 PM")
+           (get-bouncer-error
+            (b/validate (assoc-in  valid-zone [:config :hours]
+                                   [[[450 1350]]
+                                    [[0 1440]]
+                                    [[450 1350]]
+                                    [[450 1350]]
+                                    [[450 1350]]
+                                    [[450 1350]]
+                                    [[450 1350]]])
+                        zones/new-zone-validations)
+            [:config :hours])))
+    ;; a closed hour is after an opening hour
+    (is (= '("Opening Hour must occur before Closing Hour")
+           (get-bouncer-error
+            (b/validate (assoc-in  valid-zone [:config :hours]
+                                   [[[450 1350]]
+                                    [[200 100]]
+                                    [[450 1350]]
+                                    [[450 1350]]
+                                    [[450 1350]]
+                                    [[450 1350]]
+                                    [[450 1350]]])
+                        zones/new-zone-validations)
+            [:config :hours])))
+    ;; too few days submitted
+    (is (= '("Too few days submitted. Hours for M-Su must be included")
+           (get-bouncer-error
+            (b/validate (assoc-in  valid-zone [:config :hours]
+                                   [[[450 1350]]
+                                    [[450 1350]]
+                                    [[450 1350]]
+                                    [[450 1350]]
+                                    [[450 1350]]
+                                    [[450 1350]]])
+                        zones/new-zone-validations)
+            [:config :hours])))
+    ;; too many days submitted
+    (is (= ;;'("Too many days submitted. Only M-Su can be included")
+         (get-bouncer-error
+          (b/validate (assoc-in  valid-zone [:config :hours]
+                                 [[[450 1350]]
+                                  [[450 1350]]
+                                  [[450 1350]]
+                                  [[450 1350]]
+                                  [[450 1350]]
+                                  [[450 1350]]
+                                  [[450 1350]]
+                                  [[450 1350]]])
+                      zones/new-zone-validations)
+          [:config :hours])))
+    ;; no hours submitted for config, passes validation
+    (is (b/valid? (assoc-in valid-zone [:config]
+                            (dissoc (:config valid-zone)
+                                    :hours)) zones/new-zone-validations))))
