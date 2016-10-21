@@ -186,15 +186,18 @@
    {:uri "/zone/:id"
     :method "GET"
     :permissions ["view-zones"]}
-   {:uri "/zone"
-    :method "PUT"
-    :permissions ["edit-zones"]}
    {:uri "/zones"
     :method "GET"
     :permissions ["view-zones"]}
    {:uri "/zctas"
     :method "POST"
     :permissions ["view-zones"]}
+   {:uri "/zone"
+    :method "PUT"
+    :permissions ["edit-zones"]}
+   {:uri "/zone"
+    :method "POST"
+    :permissions ["create-zones"]}
    ;;!! orders
    {:uri "/order/:id"
     :method "GET"
