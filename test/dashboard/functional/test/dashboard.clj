@@ -13,6 +13,8 @@
                                              setup-ebdb-test-for-conn-fixture
                                              clear-and-populate-test-database
                                              clear-and-populate-test-database-fixture]]
+            [dashboard.test.zones :refer [zone->zone-config-str]]
+            [dashboard.zones :as zones]
             [ring.adapter.jetty :refer [run-jetty]]))
 
 ;; note: you will need a bit of elisp in order be able to use load the file
@@ -57,6 +59,7 @@
 (def login-password-input
   {:xpath "//input[@id='password']"})
 
+(def home-tab {:xpath "//li/a/div[text()='Home']"})
 
 (def zones-tab
   {:xpath "//li/a/div[text()='Zones']"})
@@ -75,11 +78,17 @@
 (def zone-form-zip-codes
   {:xpath "//label[text()='Zip Codes']/parent::div/textarea"})
 
-(def zone-submit
+(def save-button
   {:xpath "//button[text()='Save']"})
 
 (def yes-button
   {:xpath "//button[text()='Yes']"})
+
+(def zones-refresh-button
+  {:xpath "//h3[text()='Zones']/parent::div/parent::div//button/i[contains(@class,'fa-refresh')]"})
+
+(def zones-edit-button
+  {:xpath "//button[text()='Edit']"})
 
 (defn start-server [port]
   (let [_ (setup-ebdb-test-pool!)
@@ -393,27 +402,76 @@
     (click zone-form-active?)))
 
 ;; turned off, doesn't really test anything yet
-#_ (deftest zones-test
+(deftest zones-test
   (let [dash-user {:email "foo@bar.com"
                    :password "foobar"
                    :full-name "Foo Bar"}
         app-user       {:email "baz@qux.com"
                         :password "bazqux"
                         :full-name "Baz Qux"}
-        db-conn        (db/conn)
-        ]
+        db-conn        (db/conn)]
     ;; setup the env
     (create-minimal-dash-env! {:dash-user dash-user
                                :app-user app-user
                                :db-conn db-conn})
     ;; login the dash user
     (login-dashboard (:email dash-user) (:password dash-user))
-    ;; go to zones
-    (wait-until #(exists? zones-tab))
-    (click (find-element zones-tab))
-    ;; test that when a zone is created, all zips are added
-    (create-zone! {:name "Foo" :rank 1000 :active? true})
-    (input-text zone-form-zip-codes "90210, 90211, 90212")
+    (wait-until #(exists? home-tab))
+    (testing "Zones is not viewable by a dashboard user without proper perms"
+      (data-tools/give-perms!
+       {:user (login/get-user-by-email
+               db-conn (:email dash-user))
+        :db-conn db-conn
+        :perms "view-dash,view-couriers,view-users,view-orders"})
+      (refresh)
+      (is (not (exists? zones-tab))))
+    (testing "A dashboard user who can only view zones can see an existing one, but can't edit or create them"
+      (data-tools/give-perms!
+       {:user (login/get-user-by-email
+               db-conn "foo@bar.com")
+        :db-conn db-conn
+        :perms "view-dash,view-couriers,view-users,view-zones,view-orders"})
+      (zones/create-zone! db-conn (zone->zone-config-str
+                                   {:name "Foo"
+                                    :rank 100
+                                    :active true
+                                    :zips "11111,22222,33333"}))
+      (refresh)
+      ;; go to zones tab
+      (wait-until #(exists? zones-tab))
+      (click (find-element zones-tab))
+      ;; Zip Codes: label exists
+      (is (exists? {:xpath "//span[text()='Zip Codes: ']"})))
+    (testing "A zone can be edited by a user with proper permissions"
+      ;; give zone creation perms to user
+      (data-tools/give-perms!
+       {:user (login/get-user-by-email
+               db-conn "foo@bar.com")
+        :db-conn db-conn
+        :perms
+        "view-dash,view-couriers,view-users,view-zones,edit-zones,view-orders"})
+      (refresh)
+      ;; go to zones tab
+      (wait-until #(exists? zones-tab))
+      (click zones-tab)
+      (wait-until #(visible? zones-edit-button))
+      (is (visible? zones-edit-button)))
+    (testing "A basic zone can be created and all zips are added"
+      ;; give zone creation perms to user
+      (data-tools/give-perms!
+       {:user (login/get-user-by-email
+               db-conn "foo@bar.com")
+        :db-conn db-conn
+        :perms "view-dash,view-couriers,view-users,view-zones,edit-zones,create-zones,view-orders"})
+      (refresh)
+      (wait-until #(exists? zones-tab))
+      (click zones-tab)
+      (create-zone! {:name "Bar" :rank 1000 :active? true})
+      (input-text zone-form-zip-codes "90210, 90211, 90212")
+      (click save-button)
+      (click yes-button)
+      (wait-until #(exists? {:xpath "//td[text()='Bar']"}))
+      (is (exists? {:xpath "//td[text()='Bar']"})))
     ;; test that when updated:
 
     ;; 1. There are no double entries for zones
