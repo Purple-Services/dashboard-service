@@ -72,7 +72,9 @@
   [db-conn orders]
   (let [zones (map #(assoc %
                            :zips (map s/trim (s/split (:zips %) #",")))
-                   (get-all-zones-from-db db-conn))
+                   (sort-by #(if (:active %) 1 0) ; active zones first
+                            >
+                            (get-all-zones-from-db db-conn)))
         get-zones-by-zip (fn [zip]
                            (filter #(in? (:zips %) zip) zones))
         get-market-by-zip (fn [zip]
