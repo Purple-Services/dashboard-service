@@ -775,6 +775,7 @@
   (let [from-date (str from-date " 00:00:00")
         to-date (str to-date " 23:59:59")]
     (str "SELECT fleet_accounts.name as `account-name`, "
+         "users.name as `Courier`, "
          "fleet_accounts.id as `account-id`, "
          "fleet_deliveries.id as `delivery-id`, "
          "date_format(convert_tz(fleet_deliveries.timestamp_created,'UTC',"
@@ -819,6 +820,7 @@
                            [(str "Timestamp ("
                                  (timezone->prettifier timezone) ")")
                             "Order ID"
+                            "Courier"
                             "Make"
                             "Model"
                             "Year"
@@ -831,6 +833,7 @@
                             "Total Price"]
                            (map #(vector (:timestamp %)
                                          (:delivery-id %)
+                                         (:courier %)
                                          (:make %)
                                          (:model %)
                                          (:year %)
