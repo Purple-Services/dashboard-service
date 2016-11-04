@@ -435,7 +435,8 @@
                                    {:name "Foo"
                                     :rank 100
                                     :active true
-                                    :zips "11111,22222,33333"}))
+                                    :zips "11111,22222,33333"})
+                          (:id (login/get-user-by-email db-conn "foo@bar.com")))
       (refresh)
       ;; go to zones tab
       (wait-until #(exists? zones-tab))
@@ -468,7 +469,9 @@
       (click zones-tab)
       (create-zone! {:name "Bar" :rank 1000 :active? true})
       (input-text zone-form-zip-codes "90210, 90211, 90212")
+      (wait-until #(exists? save-button))
       (click save-button)
+      (wait-until #(exists? yes-button))
       (click yes-button)
       (wait-until #(exists? {:xpath "//td[text()='Bar']"}))
       (is (exists? {:xpath "//td[text()='Bar']"})))

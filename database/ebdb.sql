@@ -158,6 +158,20 @@ CREATE TABLE `account_managers` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `accounts`
+--
+
+DROP TABLE IF EXISTS `accounts`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `accounts` (
+  `id` varchar(255) NOT NULL,
+  `name` varchar(255) DEFAULT 'Usually a business name',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `coupons`
 --
 
@@ -204,6 +218,26 @@ CREATE TABLE `couriers` (
   `timestamp_created` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `dashboard_event_log`
+--
+
+DROP TABLE IF EXISTS `dashboard_event_log`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `dashboard_event_log` (
+  `id` int(11) NOT NULL AUTO_INCREMENT COMMENT 'Just an auto-incremented ID to reference the specific event log entry.',
+  `user_id` varchar(255) DEFAULT NULL COMMENT 'User ID of the user who made the change (if applicable).',
+  `action` varchar(255) DEFAULT NULL COMMENT 'The name of the action that was performed (e.g., “cancel_order” or “update_zone”).',
+  `entity_type` varchar(255) DEFAULT NULL COMMENT 'The conceptual entity being modified. Usually the singular form of a table name. (e.g., “zone”)',
+  `entity_id` varchar(255) DEFAULT NULL COMMENT 'The id of the conceptual entity being modified. (e.g., if entity is “zone” then this value should be the ID of the zone that was updated)',
+  `data` mediumtext COMMENT 'EDN dump of log info. E.g., this could contain a diff map that shows the old/new values of a zone update.',
+  `comment` mediumtext COMMENT 'E.g., the cancel reason might be placed as a comment. Alternatively, data such as that may be put in the diff map in the data column instead.',
+  `timestamp_created` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -314,8 +348,7 @@ CREATE TABLE `orders` (
   `notes` text NOT NULL DEFAULT '',
   `timestamp_created` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  KEY `user_id` (`user_id`),
-  KEY `user_id_2` (`user_id`)
+  KEY `user_id` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -334,7 +367,7 @@ CREATE TABLE `sessions` (
   `source` varchar(100) DEFAULT '',
   `timestamp_created` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=2902 DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=2937 DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -498,30 +531,10 @@ CREATE TABLE `zones` (
   `name` varchar(255) NOT NULL,
   `rank` int(11) NOT NULL DEFAULT '0',
   `active` tinyint(1) NOT NULL,
-  `color` varchar(20) NOT NULL DEFAULT '#9b59b6',
+  `color` varchar(20) NOT NULL DEFAULT '#DBDCDD',
   `config` text,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=336 DEFAULT CHARSET=utf8;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Table structure for table `zones_old`
---
-
-DROP TABLE IF EXISTS `zones_old`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
-CREATE TABLE `zones_old` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `active` tinyint(1) NOT NULL DEFAULT '0',
-  `zip_codes` mediumtext NOT NULL DEFAULT '',
-  `name` varchar(255) NOT NULL,
-  `color` varchar(255) NOT NULL,
-  `fuel_prices` varchar(255) NOT NULL COMMENT 'edn format',
-  `service_fees` varchar(255) NOT NULL COMMENT 'edn format',
-  `service_time_bracket` varchar(255) NOT NULL COMMENT 'edn format',
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=154 DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=339 DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -687,4 +700,4 @@ CREATE TABLE `zones_old` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2016-10-17 12:00:07
+-- Dump completed on 2016-11-04 17:07:33
