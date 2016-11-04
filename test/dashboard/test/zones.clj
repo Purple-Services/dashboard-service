@@ -207,14 +207,16 @@
       (zones/update-zone!
        db-conn
        (assoc (zones/get-zone-by-name db-conn "San Diego")
-              :zips "91901,91910,91911,91913,91932,91935,91941,91942,91945,91950,91977,91978,92007,92008,92009,92010,92011,92014,92019,92020,92021,92024,92037,92040,92054,92067,92071,92075,92091,92101,92102,92103,92104,92105,92106,92107,92108,92109,92110,92111,92113,92114,92115,92116,92117,92119,92120,92121,92122,92123,92124,,92129,92130,92131,92140,92154" ))
+              :zips "91901,91910,91911,91913,91932,91935,91941,91942,91945,91950,91977,91978,92007,92008,92009,92010,92011,92014,92019,92020,92021,92024,92037,92040,92054,92067,92071,92075,92091,92101,92102,92103,92104,92105,92106,92107,92108,92109,92110,92111,92113,92114,92115,92116,92117,92119,92120,92121,92122,92123,92124,,92129,92130,92131,92140,92154" )
+       admin-id)
       (is (= ["Earth" "La Jolla"]
              (:zone-names (get-zip-def-not-validated db-conn (str "92126")))))
       ;; put the zip back into San Diego, 92126 still returns proper results
       (zones/update-zone!
        db-conn
        (assoc (zones/get-zone-by-name db-conn "San Diego")
-              :zips "91901,91910,91911,91913,91932,91935,91941,91942,91945,91950,91977,91978,92007,92008,92009,92010,92011,92014,92019,92020,92021,92024,92037,92040,92054,92067,92071,92075,92091,92101,92102,92103,92104,92105,92106,92107,92108,92109,92110,92111,92113,92114,92115,92116,92117,92119,92120,92121,92122,92123,92124,92129,92130,92131,92140,92154,92126"))
+              :zips "91901,91910,91911,91913,91932,91935,91941,91942,91945,91950,91977,91978,92007,92008,92009,92010,92011,92014,92019,92020,92021,92024,92037,92040,92054,92067,92071,92075,92091,92101,92102,92103,92104,92105,92106,92107,92108,92109,92110,92111,92113,92114,92115,92116,92117,92119,92120,92121,92122,92123,92124,92129,92130,92131,92140,92154,92126")
+       admin-id)
       (is (= ["Earth" "San Diego" "La Jolla"]
              (:zone-names (get-zip-def-not-validated db-conn (str "92126")))))
       ;; remove the zip from La Jolla, 92126 still returns proper results
@@ -350,7 +352,8 @@
         (is (= '("That zone doesn't yet exist, create it first")
                (get-bouncer-error
                 (:validation (zones/update-zone! db-conn (assoc foobar
-                                                                :id -1)))
+                                                                :id -1)
+                                                 admin-id))
                 [:id]))))
       (testing "Zones can't be created with a name that already exists"
         (is (= '("Name is already in use")
@@ -364,8 +367,8 @@
       (testing "A zone can't be updated to a name that already exists"
         (zones/create-zone! db-conn (zone->zone-config-str
                                      (assoc valid-zone
-                                            :name "BazQux")
-                                     admin-id))
+                                            :name "BazQux"))
+                            admin-id)
         (let [bazqux (zones/get-zone-by-name db-conn "BazQux")]
           (is (= '("Name already exists! Please use a unique zone name")
                  (get-bouncer-error
