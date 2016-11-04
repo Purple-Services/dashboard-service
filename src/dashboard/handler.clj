@@ -457,14 +457,22 @@
                    list))))
   ;; update a zone's description. currently only supports
   ;; updating fuel_prices, service_fees and service_time_bracket
-  (PUT "/zone" {body :body}
-       (let [b (keywordize-keys body)]
+  (PUT "/zone" [:as {body :body
+                     cookies :cookies}]
+       (let [b (keywordize-keys body)
+             admin-id (-> (keywordize-keys cookies)
+                          :user-id
+                          :value)]
          (response
-          (update-zone! (conn) b))))
-  (POST "/zone" {body :body}
-        (let [b (keywordize-keys body)]
+          (update-zone! (conn) b admin-id))))
+  (POST "/zone" [:as {body :body
+                     cookies :cookies}]
+        (let [b (keywordize-keys body)
+              admin-id (-> (keywordize-keys cookies)
+                          :user-id
+                          :value)]
           (response
-           (create-zone! (conn) b))))
+           (create-zone! (conn) b admin-id))))
   ;; return all zones - not used this way anymore
   (GET "/zones" []
        (response

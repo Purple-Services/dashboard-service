@@ -408,10 +408,20 @@
                 [v/string :message "Name must be a string"]])
         (dissoc :id))))
 
+(defn log-zone-event!
+  [db-conn {:keys [user_id action entity_id data comment]}]
+  (!insert db-conn "dashboard_event_log"
+           {:user_id user_id
+            :action action
+            :entity_type "zones"
+            :entity_id entity_id
+            :data data
+            :comment comment}))
+
 (defn create-zone!
   "Given a zone map, validate it. If valid, create zone else return the
   bouncer error map."
-  [db-conn zone]
+  [db-conn zone admin-id]
   (let [{:keys [name rank active zips config]} zone
         new-zone (assoc zone :config (edn/read-string config))]
     (if (b/valid? new-zone new-zone-validations)
@@ -428,6 +438,12 @@
           (do
             ;; add the zips
             (add-zips-to-zone! db-conn zips-vec id)
+            ;; add event log
+            (log-zone-event! db-conn {:user_id admin-id
+                                      :action "create-zone"
+                                      :entity_id id
+                                      :data (str (get-zone-by-id db-conn id))
+                                      :comment ""})
             ;; return a result
             (assoc insert-result :id id))
           insert-result))
@@ -437,11 +453,12 @@
 (defn update-zone!
   "Given a zone map, validate it. If valid, update zone else return the
   bouncer error map."
-  [db-conn zone]
+  [db-conn zone admin-id]
   (let [{:keys [id name rank active zips config]} zone
         updated-zone (assoc zone :config (edn/read-string config))]
     (if (b/valid? updated-zone (zone-validations id))
-      (let [new-zips-vec (zip-str->zip-vec zips)
+      (let [old-zone (get-zone-by-id db-conn id)
+            new-zips-vec (zip-str->zip-vec zips)
             old-zips-vec (map :zip (get-all-zips-by-zone-id db-conn id))
             update-result (!update db-conn "zones"
                                    {:name name
@@ -455,6 +472,18 @@
             ;; update the zips in the zone
             (remove-zips-from-zone! db-conn old-zips id)
             (add-zips-to-zone! db-conn new-zips id)
+            (let [new-zone (get-zone-by-id db-conn id)
+                  zone-diff (data/diff old-zone new-zone)
+                  [old-changed-values new-changed-values _] zone-diff]
+              (log-zone-event! db-conn {:user_id admin-id
+                                        :action "modify-zone"
+                                        :entity_id id
+                                        :data (str {:changed-values
+                                                    {:old-values
+                                                     old-changed-values
+                                                     :new-values
+                                                     new-changed-values}})
+                                        :comment ""}))
             ;; return the result with id of zone
             (assoc update-result :id id))
           update-result))
