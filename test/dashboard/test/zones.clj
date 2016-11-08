@@ -19,11 +19,19 @@
 (use-fixtures :once db-tools/setup-ebdb-test-for-conn-fixture)
 (use-fixtures :each db-tools/clear-and-populate-test-database-fixture)
 
+(defn stringify-config
+  [zone]
+  (assoc zone
+         :current-zone
+         (assoc zone
+                :config (str (:config zone)))
+         :config (str (:config zone))))
+
 (defn create-admin!
   [db-conn]
   (data-tools/create-dash-user! {:db-conn db-conn
-                      :platform-id "foo@bar.com"
-                      :password "foobar"})
+                                 :platform-id "foo@bar.com"
+                                 :password "foobar"})
   (:id (first (db/!select db-conn "dashboard_users" [:id]
                           {:email "foo@bar.com"}))))
 (defn create-earth-zone!
@@ -64,14 +72,18 @@
       (is (= (:zones (first (db/!select db-conn "zips" [:zip :zones]
                                         {:zip "90210"})))
              (str "1," los-angeles-id)))
-      ;; 90210 is delete from Los Angeles, it should also be deleted from the db
+      ;; 90210 is deleted from Los Angeles, it should also be deleted from the db
       (zones/update-zone! db-conn (assoc
                                    los-angeles
-                                   :zips "90211,90212,90213,90214,90215")
+                                   :zips "90211,90212,90213,90214,90215"
+                                   :current-zone
+                                   (zones/get-zone-by-id db-conn
+                                                         (:id los-angeles)))
                           admin-id)
       (is (nil? (db/!select (db/conn) "zips" [:zip :zones] {:zip "90210"})))
       ;; but 90211 still exists 
-      (is (first (db/!select (db/conn) "zips" [:zip :zones] {:zip "90211"}))))))
+      (is (first (db/!select (db/conn) "zips" [:zip :zones] {:zip "90211"})))
+      )))
 
 
 (deftest zips-with-mulitple-zones
@@ -113,48 +125,52 @@
     (testing "A zone's config man be modified without affecting other zones"
       ;; update San Diego's config
       (zones/update-zone! db-conn
-                          (assoc (zones/get-zone-by-name db-conn "San Diego")
-                                 :config (str {:manually-closed? true}))
+                          (-> (zones/get-zone-by-name db-conn "San Diego")
+                              (stringify-config)
+                              (assoc :config (str {:manually-closed? true})))
                           admin-id)
       ;; La Jolla and San Diego should have the same zips
-      (is (=  "92037,92108,92111,92117,92121,92122,92123,92126,92131"
-              (:zips (zones/get-zone-by-name db-conn "La Jolla"))))
-      (is (= "91901,91910,91911,91913,91932,91935,91941,91942,91945,91950,91977,91978,92007,92008,92009,92010,92011,92014,92019,92020,92021,92024,92037,92040,92054,92067,92071,92075,92091,92101,92102,92103,92104,92105,92106,92107,92108,92109,92110,92111,92113,92114,92115,92116,92117,92119,92120,92121,92122,92123,92124,92126,92129,92130,92131,92140,92154"
+      (is (= (zones/db-zips->obj-zips "92037,92108,92111,92117,92121,92122,92123,92126,92131")
+             (:zips (zones/get-zone-by-name db-conn "La Jolla"))))
+      (is (= (zones/db-zips->obj-zips "91901,91910,91911,91913,91932,91935,91941,91942,91945,91950,91977,91978,92007,92008,92009,92010,92011,92014,92019,92020,92021,92024,92037,92040,92054,92067,92071,92075,92091,92101,92102,92103,92104,92105,92106,92107,92108,92109,92110,92111,92113,92114,92115,92116,92117,92119,92120,92121,92122,92123,92124,92126,92129,92130,92131,92140,92154")
              (:zips (zones/get-zone-by-name db-conn "San Diego")))))
     (testing "One zip can be removed without affecting another zone"
       ;; remove 92131 from La Jolla
       (zones/update-zone!
        db-conn
-       (assoc (zones/get-zone-by-name db-conn "La Jolla")
-              :zips "92037,92108,92111,92117,92121,92122,92123,92126")
+       (-> (zones/get-zone-by-name db-conn "La Jolla")
+           (stringify-config)
+           (assoc :zips "92037,92108,92111,92117,92121,92122,92123,92126"))
        admin-id)
       ;; La Jolla should have one less zip
-      (is (= "92037,92108,92111,92117,92121,92122,92123,92126"
+      (is (= (zones/db-zips->obj-zips "92037,92108,92111,92117,92121,92122,92123,92126")
              (:zips (zones/get-zone-by-name db-conn "La Jolla"))))
       ;; And San Diego should not be affected
-      (is (= "91901,91910,91911,91913,91932,91935,91941,91942,91945,91950,91977,91978,92007,92008,92009,92010,92011,92014,92019,92020,92021,92024,92037,92040,92054,92067,92071,92075,92091,92101,92102,92103,92104,92105,92106,92107,92108,92109,92110,92111,92113,92114,92115,92116,92117,92119,92120,92121,92122,92123,92124,92126,92129,92130,92131,92140,92154"
+      (is (= (zones/db-zips->obj-zips "91901,91910,91911,91913,91932,91935,91941,91942,91945,91950,91977,91978,92007,92008,92009,92010,92011,92014,92019,92020,92021,92024,92037,92040,92054,92067,92071,92075,92091,92101,92102,92103,92104,92105,92106,92107,92108,92109,92110,92111,92113,92114,92115,92116,92117,92119,92120,92121,92122,92123,92124,92126,92129,92130,92131,92140,92154")
              (:zips (zones/get-zone-by-name db-conn "San Diego")))))
     (testing "Multiple zips can be removed without affecting another zone"
       ;; remove 92111,92037,92126 from La Jolla
       (zones/update-zone!
        db-conn
-       (assoc (zones/get-zone-by-name db-conn "La Jolla")
-              :zips "92108,92117,92121,92122,92123")
+       (-> (zones/get-zone-by-name db-conn "La Jolla")
+           (stringify-config)
+           (assoc :zips "92108,92117,92121,92122,92123"))
        admin-id)
-      (is (= "92108,92117,92121,92122,92123"
+      (is (= (zones/db-zips->obj-zips "92108,92117,92121,92122,92123")
              (:zips (zones/get-zone-by-name db-conn "La Jolla"))))
-      (is (= "91901,91910,91911,91913,91932,91935,91941,91942,91945,91950,91977,91978,92007,92008,92009,92010,92011,92014,92019,92020,92021,92024,92037,92040,92054,92067,92071,92075,92091,92101,92102,92103,92104,92105,92106,92107,92108,92109,92110,92111,92113,92114,92115,92116,92117,92119,92120,92121,92122,92123,92124,92126,92129,92130,92131,92140,92154"
+      (is (= (zones/db-zips->obj-zips "91901,91910,91911,91913,91932,91935,91941,91942,91945,91950,91977,91978,92007,92008,92009,92010,92011,92014,92019,92020,92021,92024,92037,92040,92054,92067,92071,92075,92091,92101,92102,92103,92104,92105,92106,92107,92108,92109,92110,92111,92113,92114,92115,92116,92117,92119,92120,92121,92122,92123,92124,92126,92129,92130,92131,92140,92154")
              (:zips (zones/get-zone-by-name db-conn "San Diego")))))
     (testing "Multiple zips can be added without affecting another zone"
       ;; add 92111,92037,92126 back to La Jolla
       (zones/update-zone!
        db-conn
-       (assoc (zones/get-zone-by-name db-conn "La Jolla")
-              :zips "92108,92117,92121,92122,92123,92111,92037,92126")
+       (-> (zones/get-zone-by-name db-conn "La Jolla")
+           (stringify-config)
+           (assoc  :zips "92108,92117,92121,92122,92123,92111,92037,92126"))
        admin-id)
-      (is (= "92037,92108,92111,92117,92121,92122,92123,92126"
+      (is (= (zones/db-zips->obj-zips "92037,92108,92111,92117,92121,92122,92123,92126")
              (:zips (zones/get-zone-by-name db-conn "La Jolla"))))
-      (is (= "91901,91910,91911,91913,91932,91935,91941,91942,91945,91950,91977,91978,92007,92008,92009,92010,92011,92014,92019,92020,92021,92024,92037,92040,92054,92067,92071,92075,92091,92101,92102,92103,92104,92105,92106,92107,92108,92109,92110,92111,92113,92114,92115,92116,92117,92119,92120,92121,92122,92123,92124,92126,92129,92130,92131,92140,92154"
+      (is (= (zones/db-zips->obj-zips "91901,91910,91911,91913,91932,91935,91941,91942,91945,91950,91977,91978,92007,92008,92009,92010,92011,92014,92019,92020,92021,92024,92037,92040,92054,92067,92071,92075,92091,92101,92102,92103,92104,92105,92106,92107,92108,92109,92110,92111,92113,92114,92115,92116,92117,92119,92120,92121,92122,92123,92124,92126,92129,92130,92131,92140,92154")
              (:zips (zones/get-zone-by-name db-conn "San Diego")))))
     (testing "A zip will return the proper parameters, even upon deletion from one zone"
       (is (= ["Earth" "San Diego" "La Jolla"]
@@ -162,12 +178,13 @@
       ;; remove 92126 from San Diego
       (zones/update-zone!
        db-conn
-       (assoc (zones/get-zone-by-name db-conn "San Diego")
-              :zips "91901,91910,91911,91913,91932,91935,91941,91942,91945,91950,91977,91978,92007,92008,92009,92010,92011,92014,92019,92020,92021,92024,92037,92040,92054,92067,92071,92075,92091,92101,92102,92103,92104,92105,92106,92107,92108,92109,92110,92111,92113,92114,92115,92116,92117,92119,92120,92121,92122,92123,92124,,92129,92130,92131,92140,92154" )
+       (-> (zones/get-zone-by-name db-conn "San Diego")
+           (stringify-config)
+           (assoc  :zips (zones/db-zips->obj-zips "91901,91910,91911,91913,91932,91935,91941,91942,91945,91950,91977,91978,92007,92008,92009,92010,92011,92014,92019,92020,92021,92024,92037,92040,92054,92067,92071,92075,92091,92101,92102,92103,92104,92105,92106,92107,92108,92109,92110,92111,92113,92114,92115,92116,92117,92119,92120,92121,92122,92123,92124,,92129,92130,92131,92140,92154")))
        admin-id)
       (is (= ["Earth" "La Jolla"]
-             (:zone-names (get-zip-def-not-validated db-conn (str "92126")))))
-      )))
+             (:zone-names (get-zip-def-not-validated db-conn (str "92126")))))))
+  )
 
 
 (deftest manually-created-zips
@@ -182,8 +199,9 @@
         ]
     ;; update San Diego's config
     (zones/update-zone! db-conn
-                        (assoc (zones/get-zone-by-name db-conn "San Diego")
-                               :config (str {:manually-closed? true}))
+                        (-> (zones/get-zone-by-name db-conn "San Diego")
+                            (stringify-config)
+                            (assoc :config (str {:manually-closed? true})))
                         admin-id)
     ;; La Jolla should not have nil zips
     (is (not (nil? (:zips (zones/get-zone-by-name db-conn "La Jolla")))))
@@ -192,11 +210,13 @@
     ;; remove 92131 from La Jolla
     (zones/update-zone!
      db-conn
-     (assoc (zones/get-zone-by-name db-conn "La Jolla")
-            :zips "92037, 92108, 92111, 92117, 92121, 92122, 92123, 92126")
+     (-> (zones/get-zone-by-name db-conn "La Jolla")
+         (stringify-config)
+         (assoc :zips "92037, 92108, 92111, 92117, 92121, 92122, 92123, 92126"))
      admin-id)
     ;; La Jolla should have one less zip
-    (is (= "92037,92108,92111,92117,92121,92122,92123,92126"
+    (is (= (zones/db-zips->obj-zips
+            "92037,92108,92111,92117,92121,92122,92123,92126")
            (:zips (zones/get-zone-by-name db-conn "La Jolla"))))
     ;; And San Diego should not be affected
     (is (not (nil? (:zips (zones/get-zone-by-name db-conn "San Diego")))))
@@ -206,24 +226,27 @@
       ;; remove 92126 from San Diego
       (zones/update-zone!
        db-conn
-       (assoc (zones/get-zone-by-name db-conn "San Diego")
-              :zips "91901,91910,91911,91913,91932,91935,91941,91942,91945,91950,91977,91978,92007,92008,92009,92010,92011,92014,92019,92020,92021,92024,92037,92040,92054,92067,92071,92075,92091,92101,92102,92103,92104,92105,92106,92107,92108,92109,92110,92111,92113,92114,92115,92116,92117,92119,92120,92121,92122,92123,92124,,92129,92130,92131,92140,92154" )
+       (-> (zones/get-zone-by-name db-conn "San Diego")
+           (stringify-config)
+           (assoc :zips "91901,91910,91911,91913,91932,91935,91941,91942,91945,91950,91977,91978,92007,92008,92009,92010,92011,92014,92019,92020,92021,92024,92037,92040,92054,92067,92071,92075,92091,92101,92102,92103,92104,92105,92106,92107,92108,92109,92110,92111,92113,92114,92115,92116,92117,92119,92120,92121,92122,92123,92124,,92129,92130,92131,92140,92154"))
        admin-id)
       (is (= ["Earth" "La Jolla"]
              (:zone-names (get-zip-def-not-validated db-conn (str "92126")))))
       ;; put the zip back into San Diego, 92126 still returns proper results
       (zones/update-zone!
        db-conn
-       (assoc (zones/get-zone-by-name db-conn "San Diego")
-              :zips "91901,91910,91911,91913,91932,91935,91941,91942,91945,91950,91977,91978,92007,92008,92009,92010,92011,92014,92019,92020,92021,92024,92037,92040,92054,92067,92071,92075,92091,92101,92102,92103,92104,92105,92106,92107,92108,92109,92110,92111,92113,92114,92115,92116,92117,92119,92120,92121,92122,92123,92124,92129,92130,92131,92140,92154,92126")
+       (-> (zones/get-zone-by-name db-conn "San Diego")
+           (stringify-config)
+           (assoc :zips "91901,91910,91911,91913,91932,91935,91941,91942,91945,91950,91977,91978,92007,92008,92009,92010,92011,92014,92019,92020,92021,92024,92037,92040,92054,92067,92071,92075,92091,92101,92102,92103,92104,92105,92106,92107,92108,92109,92110,92111,92113,92114,92115,92116,92117,92119,92120,92121,92122,92123,92124,92129,92130,92131,92140,92154,92126"))
        admin-id)
       (is (= ["Earth" "San Diego" "La Jolla"]
              (:zone-names (get-zip-def-not-validated db-conn (str "92126")))))
       ;; remove the zip from La Jolla, 92126 still returns proper results
       (zones/update-zone!
        db-conn
-       (assoc (zones/get-zone-by-name db-conn "La Jolla")
-              :zips "92037,92108,92111,92117,92121,92122,92123,92131")
+       (-> (zones/get-zone-by-name db-conn "La Jolla")
+           (stringify-config)
+           (assoc :zips "92037,92108,92111,92117,92121,92122,92123,92131"))
        admin-id)
       (is (= ["Earth" "San Diego"]
              (:zone-names (get-zip-def-not-validated db-conn (str "92126"))))))
@@ -351,9 +374,11 @@
       (testing "A zone can't be updated with the wrong id"
         (is (= '("That zone doesn't yet exist, create it first")
                (get-bouncer-error
-                (:validation (zones/update-zone! db-conn (assoc foobar
-                                                                :id -1)
-                                                 admin-id))
+                (:validation  (zones/update-zone! db-conn
+                                                  (-> foobar
+                                                      (stringify-config)
+                                                      (assoc :id -1))
+                                                  admin-id))
                 [:id]))))
       (testing "Zones can't be created with a name that already exists"
         (is (= '("Name is already in use")
@@ -373,8 +398,10 @@
           (is (= '("Name already exists! Please use a unique zone name")
                  (get-bouncer-error
                   (:validation (zones/update-zone!
-                                db-conn (zone->zone-config-str
-                                         (assoc bazqux
-                                                :name "FooBar"))
+                                db-conn
+                                (zone->zone-config-str
+                                 (-> bazqux
+                                     (stringify-config)
+                                     (assoc :name "FooBar")))
                                 admin-id))
                   [:name]))))))))
