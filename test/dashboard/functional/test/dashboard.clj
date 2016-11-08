@@ -13,7 +13,7 @@
                                              setup-ebdb-test-for-conn-fixture
                                              clear-and-populate-test-database
                                              clear-and-populate-test-database-fixture]]
-            [dashboard.test.zones :refer [zone->zone-config-str]]
+            [dashboard.test.zones :as test-zones]
             [dashboard.zones :as zones]
             [ring.adapter.jetty :refer [run-jetty]]))
 
@@ -81,14 +81,23 @@
 (def save-button
   {:xpath "//button[text()='Save']"})
 
+(def dismiss-button
+  {:xpath "//button[text()='Dismiss']"})
+
 (def yes-button
   {:xpath "//button[text()='Yes']"})
 
-(def zones-refresh-button
-  {:xpath "//h3[text()='Zones']/parent::div/parent::div//button/i[contains(@class,'fa-refresh')]"})
+(def table-refresh-button
+  {:xpath "//div[contains(@class,'active')]//i[contains(@class,'fa-refresh')]"})
 
 (def zones-edit-button
   {:xpath "//button[text()='Edit']"})
+
+(def add-delivery-times
+  {:xpath "//button[text()='Add Delivery Times']"})
+
+(def one-hour-checkbox
+  {:xpath "//label[text()='Delivery Times Available']/parent::div//div[text()='1 Hour ']/input[@type='checkbox']"})
 
 (defn start-server [port]
   (let [_ (setup-ebdb-test-pool!)
@@ -401,7 +410,6 @@
                active?)
     (click zone-form-active?)))
 
-;; turned off, doesn't really test anything yet
 (deftest zones-test
   (let [dash-user {:email "foo@bar.com"
                    :password "foobar"
@@ -409,7 +417,12 @@
         app-user       {:email "baz@qux.com"
                         :password "bazqux"
                         :full-name "Baz Qux"}
-        db-conn        (db/conn)]
+        db-conn        (db/conn)
+        _ (create-minimal-dash-env! {:dash-user dash-user
+                                     :app-user app-user
+                                     :db-conn db-conn})
+        dash-user-id (:id (login/get-user-by-email db-conn "foo@bar.com"))
+        ]
     ;; setup the env
     (create-minimal-dash-env! {:dash-user dash-user
                                :app-user app-user
@@ -431,12 +444,12 @@
                db-conn "foo@bar.com")
         :db-conn db-conn
         :perms "view-dash,view-couriers,view-users,view-zones,view-orders"})
-      (zones/create-zone! db-conn (zone->zone-config-str
+      (zones/create-zone! db-conn (test-zones/zone->zone-config-str
                                    {:name "Foo"
                                     :rank 100
                                     :active true
                                     :zips "11111,22222,33333"})
-                          (:id (login/get-user-by-email db-conn "foo@bar.com")))
+                          dash-user-id)
       (refresh)
       ;; go to zones tab
       (wait-until #(exists? zones-tab))
@@ -475,6 +488,39 @@
       (click yes-button)
       (wait-until #(exists? {:xpath "//td[text()='Bar']"}))
       (is (exists? {:xpath "//td[text()='Bar']"})))
+    (testing "A user fails to edit a zone if their definition is stale"
+      ;; try to edit the delivery times
+      (wait-until #(exists? zones-edit-button))
+      (click zones-edit-button)
+      (wait-until #(exists? add-delivery-times))
+      (click add-delivery-times)
+      (wait-until #(exists? one-hour-checkbox))
+      (click one-hour-checkbox)
+      (click save-button)
+      ;; update the zone behind the scenes
+      (zones/update-zone! db-conn (-> (zones/get-zone-by-name db-conn "Foo")
+                                      (test-zones/stringify-config)
+                                      (assoc :rank 1000))
+                          dash-user-id)
+      (wait-until #(exists? yes-button))
+      (click yes-button)
+      (wait-until #(exists? {:xpath "//div[contains(@class,'alert-danger') and contains(text(),'You have a stale zone definition.')]"}))
+      (check-error-alert "You have a stale zone definition. Click 'Dismiss' and click the refresh button below to update your zone definitions before making changes.")
+      (wait-until #(exists? dismiss-button))
+      (click dismiss-button)
+      (click table-refresh-button)
+      ;; let's try editing again
+      (wait-until #(exists? zones-edit-button))
+      (click zones-edit-button)
+      (wait-until #(exists? add-delivery-times))
+      (click add-delivery-times)
+      (wait-until #(exists? one-hour-checkbox))
+      (click one-hour-checkbox)
+      (click save-button)
+      (wait-until #(exists? yes-button))
+      (click yes-button)
+      (wait-until #(exists? {:xpath "//span[text()='Delivery Times Available: ']/parent::h5[text()='3 Hour, 5 Hour']"}))
+      (is (exists? {:xpath "//span[text()='Delivery Times Available: ']/parent::h5[text()='3 Hour, 5 Hour']"})))
     ;; test that when updated:
 
     ;; 1. There are no double entries for zones

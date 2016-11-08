@@ -13,6 +13,12 @@
                                   raw-sql-update]]
             [dashboard.utils :as utils]))
 
+(defn db-zips->obj-zips
+  [zips]
+  (if-not (nil? zips)
+    (s/join ", " (s/split zips #","))
+    "Zip Code Error"))
+
 (defn format-zone
   "Given a zone, format it so that it will return proper json"
   [zone]
@@ -22,12 +28,9 @@
            (if (and (utils/edn-read? config)
                     (not (nil? config)))
              (edn/read-string config)
-             "config error"))
+             nil))
          :zips
-         (let [zips (:zips zone)]
-           (if-not (nil? zips)
-             (s/join ", " (s/split (:zips zone) #","))
-             "Zip Code Error"))))
+         (db-zips->obj-zips (:zips zone))))
 
 (defn get-all-zones-from-db
   "Retrieve all zones from the DB"
@@ -58,7 +61,9 @@
                     "LEFT JOIN zips ON FIND_IN_SET (zones.id,zips.zones) "
                     "WHERE zones.id = " id " "
                     "GROUP BY zones.id;")])]
-    (format-zone (first zone))))
+    (if-not (nil? zone)
+      (format-zone (first zone))
+      nil)))
 
 (defn get-zone-by-name
   "Return a zone as expected by the dashboard client by name"
@@ -73,7 +78,9 @@
                     "LEFT JOIN zips ON FIND_IN_SET (zones.id,zips.zones) "
                     "WHERE zones.name = '" name "' "
                     "GROUP BY zones.id;")])]
-    (first zone)))
+    (if-not (nil? zone)
+      (format-zone (first zone))
+      nil)))
 
 (defn get-all-zips-by-zone-id
   "Return all zips associated with zone-id"
@@ -229,60 +236,6 @@
              delete-zones-statement))
           {:success true})))
 
-
-#_ (def zone-validations
-     {:price-87 [[v/required :message "87 Octane price can not be blank!"]
-                 [v/number
-                  :message "87 Octance price must be in a dollar amount"]
-                 [v/in-range [1 5000] :message
-                  "Price must be within $0.01 and $50.00"]]
-      :price-91 [[v/required :message "91 Octane price can not be blank!"]
-                 [v/number
-                  :message "91 Octance price must be in a dollar amount"]
-                 [v/in-range [1 5000] :message
-                  "Price must be within $0.01 and $50.00"]]
-      :service-fee-60 [[v/required :message
-                        "One hour service fee can not be blank!"]
-                       [v/number
-                        :message
-                        "One hour service fee must be in a dollar amount"]
-                       [v/in-range [0 5000] :message
-                        "Price must be within $0.00 and $50.00"]]
-      :service-fee-180 [[v/required :message
-                         "Three hour service fee can not be blank!"]
-                        [v/number
-                         :message
-                         "Three hour service fee must be in a dollar amount"]
-                        [v/in-range [0 5000] :message
-                         "Price must be within $0.00 and $50.00"]]
-      :service-fee-300 [[v/required :message
-                         "Five hour service fee can not be blank!"]
-                        [v/number
-                         :message
-                         "Five hour service fee must be in a dollar amount"]
-                        [v/in-range [0 5000] :message
-                         "Price must be within $0.00 and $50.00"]]
-      :service-time-bracket-begin [[v/required :message
-                                    "Begin time can not be blank!"]
-                                   [v/number
-                                    :message "Service time must be a number"]
-                                   [v/integer
-                                    :message
-                                    "Service time must be a whole number!"]
-                                   [v/in-range [0 1440]
-                                    :message
-                                    "Service time must be between 0 and 1440"]]
-      :service-time-bracket-end [[v/required :message
-                                  "End time can not be blank!"]
-                                 [v/number
-                                  :message "Service time must be a number"]
-                                 [v/integer
-                                  :message
-                                  "Service time must be a whole number!"]
-                                 [v/in-range [0 1440]
-                                  :message
-                                  "Service time must be between 0 and 1440"]]})
-
 (defn name-available?
   "Is the name for zone currently available?"
   [name]
@@ -342,6 +295,11 @@
     #(into [] (concat % [:pre pre]))
     validators)))
 
+(defn stale-current-zone?
+  [current-zone]
+  (let [current-zone-db (get-zone-by-id (conn) (:id current-zone))]
+    (boolean (= current-zone current-zone-db))))
+
 (defn zone-validations [& [id]]
   {:id   [[zone-exists?
            :message "That zone doesn't yet exist, create it first"]]
@@ -358,6 +316,11 @@
    :zips [[v/required :message "A zone must have zip codes associated with it"]
           [zips-valid? :message (str "You must provide 5-digit zip codes "
                                      "separated by a commas")]]
+   :current-zone
+   [[stale-current-zone?
+     :message (str "You have a stale zone definition. "
+                   "Click 'Dismiss' and click the refresh button below to "
+                   "update your zone definitions before making changes.")]]
    [:config :hours] (pre-validator
                      [[vector?
                        :message (str "Hours must be in vector format.")]
@@ -406,14 +369,15 @@
                [[name-available? :message "Name is already in use"]
                 [v/required :message "Name can not be blank!"]
                 [v/string :message "Name must be a string"]])
-        (dissoc :id))))
+        (dissoc :id)
+        (dissoc :current-zone))))
 
 (defn log-zone-event!
   [db-conn {:keys [user_id action entity_id data comment]}]
   (!insert db-conn "dashboard_event_log"
            {:user_id user_id
             :action action
-            :entity_type "zones"
+            :entity_type "zone"
             :entity_id entity_id
             :data data
             :comment comment}))
@@ -454,8 +418,13 @@
   "Given a zone map, validate it. If valid, update zone else return the
   bouncer error map."
   [db-conn zone admin-id]
-  (let [{:keys [id name rank active zips config]} zone
-        updated-zone (assoc zone :config (edn/read-string config))]
+  (let [{:keys [id name rank active zips config current-zone]} zone
+        updated-zone (assoc zone
+                            :config (edn/read-string config)
+                            :current-zone
+                            (assoc current-zone
+                                   :config
+                                   (edn/read-string (:config current-zone))))]
     (if (b/valid? updated-zone (zone-validations id))
       (let [old-zone (get-zone-by-id db-conn id)
             new-zips-vec (zip-str->zip-vec zips)
