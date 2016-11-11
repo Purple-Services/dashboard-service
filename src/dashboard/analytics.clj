@@ -774,9 +774,9 @@
   [{:keys [from-date to-date timezone]}]
   (let [from-date (str from-date " 00:00:00")
         to-date (str to-date " 23:59:59")]
-    (str "SELECT fleet_accounts.name as `account-name`, "
+    (str "SELECT accounts.name as `account-name`, "
+         "fleet_locations.name as 'location-name', "
          "users.name as `Courier`, "
-         "fleet_accounts.id as `account-id`, "
          "fleet_deliveries.id as `delivery-id`, "
          "date_format(convert_tz(fleet_deliveries.timestamp_created,'UTC',"
          "'" timezone "'"
@@ -788,13 +788,14 @@
          "ROUND((fleet_deliveries.gas_price / 100) * fleet_deliveries.gallons, 2) as `total-price`, "
          "fleet_deliveries.gas_type as `Octane`, if(fleet_deliveries.is_top_tier, 'yes', 'no') as `top-tier?` "
          "FROM `fleet_deliveries` "
-         "LEFT JOIN fleet_accounts ON fleet_deliveries.account_id = fleet_accounts.id "
+         "LEFT JOIN fleet_locations ON fleet_locations.id = fleet_deliveries.fleet_location_id "
+         "LEFT JOIN accounts ON accounts.id = fleet_locations.account_id "
          "LEFT JOIN users ON fleet_deliveries.courier_id = users.id "
          "WHERE fleet_deliveries.timestamp_created >= "
          "convert_tz('" from-date "','" timezone "','UTC') "
          "AND fleet_deliveries.timestamp_created <= "
          "convert_tz('" to-date "','" timezone "','UTC') "
-         "ORDER BY fleet_accounts.name ASC, fleet_deliveries.timestamp_created ASC;"
+         "ORDER BY accounts.name ASC, fleet_deliveries.timestamp_created ASC;"
          )))
 
 (defn generate-fleet-accounts-xlsx
@@ -820,6 +821,7 @@
                            [(str "Timestamp ("
                                  (timezone->prettifier timezone) ")")
                             "Order ID"
+                            "Location"
                             "Courier"
                             "Make"
                             "Model"
@@ -833,6 +835,7 @@
                             "Total Price"]
                            (map #(vector (:timestamp %)
                                          (:delivery-id %)
+                                         (:location-name %)
                                          (:courier %)
                                          (:make %)
                                          (:model %)
@@ -845,7 +848,9 @@
                                          (:gas-price %)
                                          (:total-price %))
                                 (->> fleet-account-deliveries
-                                     (sort-by :timestamp)))))
+                                     (sort-by :timestamp)
+                                     (sort-by :location-name)
+                                     ))))
             report-vectors (fn [fleet-account-deliveries]
                              (into [] (report-vecs fleet-account-deliveries)))
             account-name-report-vector-map (fmap report-vectors grouped-set)
@@ -870,8 +875,7 @@
   "Return a MySQL string for retrieving orders that are associated with
   account manager accounts in the range from-date to to-date using timezone."
   [{:keys [from-date to-date timezone]}]
-  (str "SELECT account_managers.email AS `manager-email`, "
-       "account_managers.id AS `manager-id`, "
+  (str "SELECT accounts.name AS `account-name`, "
        "users.email AS `user-email`, "
        "users.name AS `user-name`, "
        "orders.id AS `delivery-id`, "
@@ -895,7 +899,8 @@
        "IF(orders.tire_pressure_check, 'yes', 'no') AS `tire-pressure-check?` "
        "FROM `orders` "
        "JOIN users ON users.id = orders.user_id "
-       "JOIN account_managers ON account_managers.id = users.account_manager_id "
+       "JOIN account_children ON account_children.user_id = users.id "
+       "JOIN accounts ON accounts.id = account_children.account_id "
        "JOIN vehicles ON vehicles.id = orders.vehicle_id "
        "AND " (get-event-within-time-range "orders.event_log"
                                            "complete"
@@ -903,10 +908,9 @@
                                            to-date
                                            timezone)
        "WHERE orders.status = 'complete' "
-       "ORDER BY account_managers.email ASC, orders.timestamp_created ASC;"
+       "ORDER BY accounts.name ASC, orders.timestamp_created ASC;"
        ))
 
-;; add service-fee and tire pressure check (yes/no)
 (defn generate-managed-accounts-xlsx
   [{:keys [from-date to-date timezone db-conn]}]
   (let [from-date (str from-date " 00:00:00")
@@ -918,7 +922,7 @@
            {:from-date from-date
             :to-date to-date
             :timezone timezone})])]
-    (let [grouped-set (group-by :manager-email
+    (let [grouped-set (group-by :account-name
                                 managed-accounts-result)
           report-vecs (fn [managed-account-orders]
                         (cons
