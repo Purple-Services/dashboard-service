@@ -318,9 +318,9 @@
                                      "separated by a commas")]]
    :current-zone
    [[stale-current-zone?
-     :message (str "You have a stale zone definition. "
+     :message (str "Someone else was editing this zone while you were. "
                    "Click 'Dismiss' and click the refresh button below to "
-                   "update your zone definitions before making changes.")]]
+                   "get the updated version before making changes.")]]
    [:config :hours] (pre-validator
                      [[vector?
                        :message (str "Hours must be in vector format.")]
