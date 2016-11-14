@@ -63,4 +63,4 @@ CHANGE COLUMN `account_id` `fleet_location_id` varchar(255) NOT NULL;
 ALTER TABLE `fleet_deliveries` ADD `service_fee` int(11) NOT NULL DEFAULT 0;
 ALTER TABLE `fleet_deliveries` ADD `total_price` int(11) NOT NULL DEFAULT 0;
 
-
+UPDATE `fleet_deliveries` SET `total_price` = CEIL(`gas_price` * `gallons`);
