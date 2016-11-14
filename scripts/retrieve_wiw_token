@@ -1,0 +1,37 @@
+#!/bin/bash
+
+# usage: retrieve_wiw_token -u <username> -p <password> -k <key>
+# ex: retrieve_wiw_token -u james@purpleapp.com -p foobar -k 4dj19fn67sn19d6s2hd42hsjd
+# begin code from http://stackoverflow.com/questions/192249/how-do-i-parse-command-line-arguments-in-bash
+while [[ $# -gt 1 ]]
+do
+key="$1"
+
+case $key in
+    -u|--username)
+    USERNAME="$2"
+    shift # past argument
+    ;;
+    -p|--password)
+    PASSWORD="$2"
+    shift # past argument
+    ;;
+    -k|--key)
+    KEY="$2"
+    shift # past argument
+    ;;
+    *)
+    # unknown option
+    ;;
+esac
+shift # past argument or value
+done
+# end http://stackoverflow.com/questions/192249/how-do-i-parse-command-line-arguments-in-bash
+
+# you'll need node and the command line json util
+# see: https://github.com/trentm/json
+# install: npm install -g json
+curl https://api.wheniwork.com/2/login \
+     --data '{"username":"'"$USERNAME"'", "password": "'"$PASSWORD"'"}' \
+     -H "W-Key: $KEY" | json login | json token
+
