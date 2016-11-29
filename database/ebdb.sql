@@ -361,6 +361,7 @@ DROP TABLE IF EXISTS `sessions`;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `sessions` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
+  `active` tinyint(1) NOT NULL DEFAULT '1',
   `user_id` varchar(255) NOT NULL,
   `token` varchar(255) NOT NULL,
   `ip` varchar(100) NOT NULL,
