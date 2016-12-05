@@ -29,6 +29,11 @@
 (def timezone-prettifier
   {:America/Los_Angeles "Pacific"})
 
+(defn get-by-index
+  "Get an el from coll whose k is equal to v. Returns nil if el doesn't exist"
+  [coll k v]
+  (first (filter #(= (k %) v) coll)))
+
 (defn timezone->prettifier
   [timezone]
   (if-let [prettified ((keyword timezone) timezone-prettifier)]
@@ -781,7 +786,7 @@
          "date_format(convert_tz(fleet_deliveries.timestamp_created,'UTC',"
          "'" timezone "'"
          "),'%Y-%m-%d %H:%i:%S') as `timestamp`, "
-         "fleet_deliveries.vin as `vin`, "
+         "IF(fleet_deliveries.vin ='','NO VIN',fleet_deliveries.vin) as `vin`, "
          "fleet_deliveries.license_plate as `plate-or-stock-no`, "
          "fleet_deliveries.gallons as `gallons`, "
          "ROUND(fleet_deliveries.gas_price / 100, 2) as `gas-price`, "
@@ -809,67 +814,71 @@
                                              :timezone timezone})])
         vins (into [] (distinct (map :vin fleet-result)))
         get-info-batch-result (get-info-batch vins)]
-    ;; make sure there wasn't an error retrieving vins
-    (if (:success get-info-batch-result)
-      ;; generate reports
-      (let [vins-info (:resp get-info-batch-result)
-            fleet-result-vins-info (join vins-info fleet-result)
-            grouped-set            (group-by :account-name
-                                             fleet-result-vins-info)
-            report-vecs (fn [fleet-account-deliveries]
-                          (cons
-                           [(str "Timestamp ("
-                                 (timezone->prettifier timezone) ")")
-                            "Order ID"
-                            "Location"
-                            "Courier"
-                            "Make"
-                            "Model"
-                            "Year"
-                            "VIN"
-                            "Plate or Stock Number"
-                            "Octane"
-                            "Top Tier?"
-                            "Gallons"
-                            "Gallon Price"
-                            "Total Price"]
-                           (map #(vector (:timestamp %)
-                                         (:delivery-id %)
-                                         (:location-name %)
-                                         (:courier %)
-                                         (:make %)
-                                         (:model %)
-                                         (:year %)
-                                         (:vin %)
-                                         (:plate-or-stock-no %)
-                                         (:octane %)
-                                         (:top-tier? %)
-                                         (:gallons %)
-                                         (:gas-price %)
-                                         (:total-price %))
-                                (->> fleet-account-deliveries
-                                     (sort-by :timestamp)
-                                     (sort-by :location-name)
-                                     ))))
-            report-vectors (fn [fleet-account-deliveries]
-                             (into [] (report-vecs fleet-account-deliveries)))
-            account-name-report-vector-map (fmap report-vectors grouped-set)
-            account-name-report-vectors (into
-                                         []
-                                         (apply
-                                          concat
-                                          (map #(into []
-                                                      (cons (vector (first %))
-                                                            (second %)))
-                                               account-name-report-vector-map)))
-            wb (spreadsheet/create-workbook "Fleet Accounts"
-                                            account-name-report-vectors)
-            _ (spreadsheet/save-workbook! "fleet-accounts.xlsx" wb)
-            ]
-        {:success true})
-      ;; error
-      {:data "Error"
-       :success false})))
+    ;; generate batch report
+    (let [vins-info (:resp get-info-batch-result)
+          ;; have to do this the hard way!
+          fleet-result-vins-info (map
+                                  #(let [vin-info (get-by-index vins-info
+                                                                :vin (:vin %)) ]
+                                     (if-not (nil? vin-info)
+                                       (assoc %
+                                              :make (:make vin-info )
+                                              :model (:model vin-info)
+                                              :year (:year vin-info))
+                                       %))
+                                  fleet-result)
+          grouped-set            (group-by :account-name
+                                           fleet-result-vins-info)
+          report-vecs (fn [fleet-account-deliveries]
+                        (cons
+                         [(str "Timestamp ("
+                               (timezone->prettifier timezone) ")")
+                          "Order ID"
+                          "Location"
+                          "Courier"
+                          "Make"
+                          "Model"
+                          "Year"
+                          "VIN"
+                          "Plate or Stock Number"
+                          "Octane"
+                          "Top Tier?"
+                          "Gallons"
+                          "Gallon Price"
+                          "Total Price"]
+                         (map #(vector (:timestamp %)
+                                       (:delivery-id %)
+                                       (:location-name %)
+                                       (:courier %)
+                                       (:make %)
+                                       (:model %)
+                                       (:year %)
+                                       (:vin %)
+                                       (:plate-or-stock-no %)
+                                       (:octane %)
+                                       (:top-tier? %)
+                                       (:gallons %)
+                                       (:gas-price %)
+                                       (:total-price %))
+                              (->> fleet-account-deliveries
+                                   (sort-by :timestamp)
+                                   (sort-by :location-name)
+                                   ))))
+          report-vectors (fn [fleet-account-deliveries]
+                           (into [] (report-vecs fleet-account-deliveries)))
+          account-name-report-vector-map (fmap report-vectors grouped-set)
+          account-name-report-vectors (into
+                                       []
+                                       (apply
+                                        concat
+                                        (map #(into []
+                                                    (cons (vector (first %))
+                                                          (second %)))
+                                             account-name-report-vector-map)))
+          wb (spreadsheet/create-workbook "Fleet Accounts"
+                                          account-name-report-vectors)
+          _ (spreadsheet/save-workbook! "fleet-accounts.xlsx" wb)]
+      {:success true})))
 
 (defn managed-accounts-invoice-query
   "Return a MySQL string for retrieving orders that are associated with
@@ -974,11 +983,6 @@
           _ (spreadsheet/save-workbook! "managed-accounts.xlsx" wb)
           ]
       {:success true})))
-
-(defn get-by-index
-  "Get an el from coll whose k is equal to v. Returns nil if el doesn't exist"
-  [coll k v]
-  (first (filter #(= (k %) v) coll)))
 
 (defn insert-value-when-missing-index-map
   "Given a vector of sets, with each set being composed of hash-maps with two
