@@ -29,6 +29,19 @@
          :auth-refresh? false
          :browser-uri "/"
          :reload-paths ["src" "resources" "checkouts"]}
+  :profiles {:dev [{:dependencies
+                    [[javax.servlet/servlet-api "2.5"]
+                     [ring/ring-mock "0.3.0"]
+                     [org.seleniumhq.selenium/selenium-java "2.47.1"]
+                     [clj-webdriver "0.7.2"]
+                     [ring "1.5.0"]
+                     [pjstadig/humane-test-output "0.6.0"]]
+                    :injections
+                    [(require 'pjstadig.humane-test-output)
+                     (pjstadig.humane-test-output/activate!)]}
+                   ;; :profiles/dev
+                   :profiles/local
+                   ]}
   :aws {:beanstalk {:environments [{:name "dashboard-prod"}
                                    {:name "dashboard-dev-env"}]
                     :s3-bucket "leinbeanstalkpurple"
