@@ -52,6 +52,7 @@
              "sessions"
              {:user_id (:id user)
               :token token
+              :source "dashboard"
               :ip (or client-ip "")})
     {:success true
      :token token
