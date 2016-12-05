@@ -32,4 +32,14 @@
   :aws {:beanstalk {:environments [{:name "dashboard-prod"}
                                    {:name "dashboard-dev-env"}]
                     :s3-bucket "leinbeanstalkpurple"
-                    :region "us-west-2"}})
+                    :region "us-west-2"}}
+  :profiles {:app-integration-test {:env {:test-db-host "localhost"
+                                          :test-db-name "ebdb_test"
+                                          :test-db-port "3306"
+                                          :test-db-user "root"
+                                          :test-db-password ""}
+                                    :jvm-opts ["-Dwebdriver.chrome.driver=/usr/lib/chromium-browser/chromedriver"]
+                                    :plugins [[lein-environ "1.1.0"]]}
+             :app-integration-dev-deploy
+             {:aws {:access-key ~(System/getenv "AWS_ACCESS_KEY")
+                    :secret-key ~(System/getenv "AWS_SECRET_KEY")}}})
