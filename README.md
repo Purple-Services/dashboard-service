@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.com/Purple-Services/dashboard-service.svg?token=qtYcDv5JYzqmyunRnB93&branch=dev)](https://travis-ci.com/Purple-Services/dashboard-service)
+
 # Dashboard Service
 Dashboard API + logic specific to dashboard.
 
