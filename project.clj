@@ -29,30 +29,33 @@
          :auth-refresh? false
          :browser-uri "/"
          :reload-paths ["src" "resources" "checkouts"]}
+  :aws {:beanstalk {:environments [{:name "dashboard-prod"}
+                                   {:name "dashboard-dev-env"}]
+                    :s3-bucket "leinbeanstalkpurple"
+                    :region "us-west-2"}}
   :profiles {:dev [{:dependencies
                     [[javax.servlet/servlet-api "2.5"]
                      [ring/ring-mock "0.3.0"]
                      [org.seleniumhq.selenium/selenium-java "2.47.1"]
                      [clj-webdriver "0.7.2"]
-                     [ring "1.5.0"]
                      [pjstadig/humane-test-output "0.6.0"]]
                     :injections
                     [(require 'pjstadig.humane-test-output)
                      (pjstadig.humane-test-output/activate!)]}
-                   ;; :profiles/dev
-                   :profiles/local
-                   ]}
-  :aws {:beanstalk {:environments [{:name "dashboard-prod"}
-                                   {:name "dashboard-dev-env"}]
-                    :s3-bucket "leinbeanstalkpurple"
-                    :region "us-west-2"}}
-  :profiles {:app-integration-test {:env {:test-db-host "localhost"
+                   :profiles/local]
+             :app-integration-test {:env {:test-db-host "localhost"
                                           :test-db-name "ebdb_test"
                                           :test-db-port "3306"
                                           :test-db-user "root"
                                           :test-db-password ""}
                                     :jvm-opts ["-Dwebdriver.chrome.driver=/usr/lib/chromium-browser/chromedriver"]
-                                    :plugins [[lein-environ "1.1.0"]]}
+                                    :plugins [[lein-environ "1.1.0"]]
+                                    :dependencies
+                                    [[javax.servlet/servlet-api "2.5"]
+                                     [ring/ring-mock "0.3.0"]
+                                     [org.seleniumhq.selenium/selenium-java "2.47.1"]
+                                     [clj-webdriver "0.7.2"]
+                                     [pjstadig/humane-test-output "0.6.0"]]}
              :app-integration-dev-deploy
              {:aws {:access-key ~(System/getenv "AWS_ACCESS_KEY")
                     :secret-key ~(System/getenv "AWS_SECRET_KEY")}}})
