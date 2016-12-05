@@ -8,13 +8,18 @@ CREATE TABLE `accounts` (
 );
 
 /* accounts values */
+/* new account id, old name */
+/* you can retrieve new id's at curl https://api.purpleapp.com/gen-id */
 INSERT INTO `accounts` VALUES ('w0RK0R6EcGYEzMTeWi5B','Jim Falk Lexus'),
        	    	       	      ('RpAiP52Qj26D3Vtc1650','Snow LA'),
 			      ('PNwH18qWiIUvtCUkrBr1','AA Global'),
 			      ('Y6ODz7roZ5haZpJ9aIKy','Pacific BMW'),
 			      ('RlkL7Gp6S5IKFr6tcBSn','SKURT'),
 			      ('rvLLOMnh8mqD08fmrFou','Bemus'),
-			      ('BmFyfnvXpDaVcGvOrsng','Mauzy');
+			      ('BmFyfnvXpDaVcGvOrsng','Mauzy'),
+			      ('5VDcpK5A7gRRvX6kvjxZ','PackOut Co'),
+			      ('oScJCvcH7LtiUhxvGmkf','Silvercar'),
+			      ('Dxmw366eEfvm3pKLr9ZG', 'Green Guard Services');
 
 /* create account_children table */
 DROP TABLE IF EXISTS `account_children`;
@@ -45,6 +50,7 @@ CREATE TABLE `fleet_locations` (
 );
 
 /* fleet_locations values */
+/* <fleet_accountds.id>, <accounts.id> (from above), <fleet_accounts.name>, <fleet_accounts.address_zip> */
 INSERT INTO `fleet_locations`
 VALUES ('UxE0goGbIOqQ3cQkSVG8','w0RK0R6EcGYEzMTeWi5B','Jim Falk Lexus Storage Facility','90067'),
        ('AdxtRqHRt9nYWIZSNias','rvLLOMnh8mqD08fmrFou','Bemus - Santa Ana','92705'),
@@ -52,12 +58,12 @@ VALUES ('UxE0goGbIOqQ3cQkSVG8','w0RK0R6EcGYEzMTeWi5B','Jim Falk Lexus Storage Fa
        ('jnK8887Ggfij9997ei34','PNwH18qWiIUvtCUkrBr1','AA Global','90011'),
        ('MaE7gvKkIOqQ3dwkSHd3','Y6ODz7roZ5haZpJ9aIKy','Pacific BMW','91204'),
        ('mmZXfMuI90hKRuyNoisjX9','RlkL7Gp6S5IKFr6tcBSn','SKURT - DTLA','90015'),
-       ('QE0pLyG34z7jt0rCcB6LcB','RlkL7Gp6S5IKFr6tcBSn','SKURT - Hollywood','90068');
+       ('QE0pLyG34z7jt0rCcB6LcB','RlkL7Gp6S5IKFr6tcBSn','SKURT - Hollywood','90068'),
+       ('BQjGGCgNxSKw8rChYraW','5VDcpK5A7gRRvX6kvjxZ','PackOut Co','92078'),
+       ('oScJCvcH7LtiUhxvGmkf','oScJCvcH7LtiUhxvGmkf','Silvercar','90045'),
+       ('sp2JWTD9orGhuWjJPQDM','Dxmw366eEfvm3pKLr9ZG','Green Guard Services - San Marcos','92069');
        
 /* modify fleet_deliveries table */
-
--- UPDATE fleet_deliveries CASE fleet_deliveries.account_id WHEN SET fleet_deliveries.account_id = fleet_locations.id;
-
 ALTER TABLE `fleet_deliveries`
 CHANGE COLUMN `account_id` `fleet_location_id` varchar(255) NOT NULL;
 ALTER TABLE `fleet_deliveries` ADD `service_fee` int(11) NOT NULL DEFAULT 0;
