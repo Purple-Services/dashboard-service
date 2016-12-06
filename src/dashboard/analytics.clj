@@ -786,7 +786,7 @@
          "date_format(convert_tz(fleet_deliveries.timestamp_created,'UTC',"
          "'" timezone "'"
          "),'%Y-%m-%d %H:%i:%S') as `timestamp`, "
-         "IF(fleet_deliveries.vin ='','NO VIN',fleet_deliveries.vin) as `vin`, "
+         "fleet_deliveries.vin as `vin`, "
          "fleet_deliveries.license_plate as `plate-or-stock-no`, "
          "fleet_deliveries.gallons as `gallons`, "
          "ROUND(fleet_deliveries.gas_price / 100, 2) as `gas-price`, "
