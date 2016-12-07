@@ -165,8 +165,7 @@
                       log
                       [])
           update-result (!update db-conn "users"
-                                 (assoc db-user
-                                        :referral_gallons referral_gallons)
+                                 {:referral_gallons referral_gallons}
                                  {:id (:id db-user)})]
       (if (:success update-result)
         (do
@@ -218,8 +217,7 @@
           {:success false
            :message (str "This user registered with " (:type current-user) ". "
                          "They must register through the app using an email "
-                         "address in order to be a courier."
-                         )}
+                         "address in order to be a courier.")}
           (> (:total
               (first (!select db-conn "orders" ["count(*) as total"]
                               {:user_id (:id user)})))
