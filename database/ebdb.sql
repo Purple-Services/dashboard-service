@@ -144,6 +144,23 @@ SET character_set_client = utf8;
 SET character_set_client = @saved_cs_client;
 
 --
+-- Table structure for table `account_children`
+--
+
+DROP TABLE IF EXISTS `account_children`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `account_children` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `account_id` varchar(255) NOT NULL,
+  `user_id` varchar(255) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_account_children_account_id` (`account_id`),
+  KEY `idx_account_children_user_id` (`user_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `account_managers`
 --
 
@@ -151,10 +168,13 @@ DROP TABLE IF EXISTS `account_managers`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `account_managers` (
-  `id` varchar(255) NOT NULL,
-  `email` varchar(255) NOT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `user_id` varchar(255) NOT NULL,
+  `account_id` varchar(255) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_account_managers_user_id` (`user_id`),
+  KEY `idx_account_managers_account_id` (`account_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -169,6 +189,22 @@ CREATE TABLE `accounts` (
   `name` varchar(255) DEFAULT 'Usually a business name',
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `api_keys`
+--
+
+DROP TABLE IF EXISTS `api_keys`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `api_keys` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `account_id` varchar(255) NOT NULL,
+  `api_key` varchar(255) NOT NULL,
+  `active` tinyint(1) NOT NULL DEFAULT '1',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -237,7 +273,7 @@ CREATE TABLE `dashboard_event_log` (
   `comment` mediumtext COMMENT 'E.g., the cancel reason might be placed as a comment. Alternatively, data such as that may be put in the diff map in the data column instead.',
   `timestamp_created` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -283,20 +319,39 @@ DROP TABLE IF EXISTS `fleet_deliveries`;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `fleet_deliveries` (
   `id` varchar(255) NOT NULL,
-  `account_id` varchar(255) NOT NULL,
+  `fleet_location_id` varchar(255) NOT NULL,
   `courier_id` varchar(255) NOT NULL,
   `vin` varchar(255) NOT NULL DEFAULT '',
   `license_plate` varchar(255) NOT NULL DEFAULT '',
-  `gallons` double NOT NULL DEFAULT '0',
   `gas_type` varchar(255) NOT NULL,
   `is_top_tier` tinyint(1) NOT NULL DEFAULT '1',
+  `gallons` double NOT NULL DEFAULT '0',
   `gas_price` int(11) NOT NULL DEFAULT '0',
+  `service_fee` int(11) NOT NULL,
+  `total_price` int(11) NOT NULL,
   `timestamp_created` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  KEY `account_id` (`account_id`),
   KEY `courier_id` (`courier_id`),
   KEY `vin` (`vin`),
-  KEY `license_plate` (`license_plate`)
+  KEY `license_plate` (`license_plate`),
+  KEY `idx_fleet_deliveries_fleet_location_id` (`fleet_location_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `fleet_locations`
+--
+
+DROP TABLE IF EXISTS `fleet_locations`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `fleet_locations` (
+  `id` varchar(255) NOT NULL,
+  `account_id` varchar(255) NOT NULL,
+  `name` varchar(255) NOT NULL,
+  `address_zip` varchar(255) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_fleet_locations_account_id` (`account_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -316,7 +371,8 @@ CREATE TABLE `orders` (
   `license_plate` varchar(255) NOT NULL DEFAULT '' COMMENT 'license plate of the vehicle at the time the order was made',
   `target_time_start` int(11) NOT NULL DEFAULT '0',
   `target_time_end` int(11) NOT NULL DEFAULT '0',
-  `gallons` double NOT NULL DEFAULT '0',
+  `gallons` double DEFAULT NULL,
+  `is_fillup` tinyint(1) NOT NULL DEFAULT '0',
   `gas_type` varchar(255) NOT NULL DEFAULT '',
   `is_top_tier` tinyint(1) NOT NULL DEFAULT '1',
   `tire_pressure_check` tinyint(1) NOT NULL DEFAULT '0',
@@ -367,8 +423,9 @@ CREATE TABLE `sessions` (
   `ip` varchar(100) NOT NULL,
   `source` varchar(100) DEFAULT '',
   `timestamp_created` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `api_key_id` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=2937 DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=1023249 DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -446,21 +503,20 @@ CREATE TABLE `users` (
   `referral_code` varchar(255) NOT NULL DEFAULT '',
   `referral_gallons` double NOT NULL DEFAULT '0',
   `is_courier` tinyint(1) NOT NULL DEFAULT '0' COMMENT 'if ''true'', there should be an entry with this id in the ''couriers'' table',
-  `account_manager_id` varchar(255) NOT NULL DEFAULT '',
   `subscription_id` int(11) NOT NULL DEFAULT '0' COMMENT '0 means no subscription',
   `subscription_period_start_time` int(11) DEFAULT NULL COMMENT 'not necessarily equal to subscription_expiration_time - [the subscription''s period]',
   `subscription_expiration_time` int(11) DEFAULT NULL,
   `subscription_auto_renew` tinyint(1) NOT NULL DEFAULT '0',
-  `subscription_payment_log` text NOT NULL DEFAULT '',
+  `subscription_payment_log` text,
   `stripe_customer_id` varchar(255) DEFAULT '',
-  `stripe_cards` text NOT NULL DEFAULT '',
+  `stripe_cards` text,
   `stripe_default_card` varchar(255) DEFAULT NULL,
   `apns_token` varchar(255) NOT NULL DEFAULT '',
   `arn_endpoint` varchar(255) NOT NULL DEFAULT '',
   `os` varchar(255) DEFAULT '',
   `app_version` varchar(50) DEFAULT '',
   `sift_score` int(11) DEFAULT NULL COMMENT 'most recent sift score to determine if fraudulent user',
-  `admin_event_log` text NOT NULL DEFAULT '',
+  `admin_event_log` text,
   `timestamp_created` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
@@ -535,7 +591,7 @@ CREATE TABLE `zones` (
   `color` varchar(20) NOT NULL DEFAULT '#DBDCDD',
   `config` text,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=339 DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB AUTO_INCREMENT=340 DEFAULT CHARSET=utf8;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -701,4 +757,4 @@ CREATE TABLE `zones` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2016-11-04 17:07:33
+-- Dump completed on 2016-12-07 11:15:55
