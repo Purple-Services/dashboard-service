@@ -159,7 +159,8 @@
   [db-conn user]
   (if (b/valid? user user-validations)
     (let [{:keys [admin_id referral_comment referral_gallons id]} user
-          db-user (get-user-by-id db-conn id)
+          db-user  (dissoc (get-user-by-id db-conn id)
+                           :account_manager_id)
           event-log (if-let [log (edn/read-string (:admin_event_log db-user))]
                       log
                       [])
@@ -182,7 +183,21 @@
                            :comment (or referral_comment "")}))}
                    {:id (:id db-user)})
           (assoc update-result :id (:id db-user)))
-        update-result))
+        update-result)
+      ;; update that there was a failure
+      (do
+        ;; update the log
+        (!update db-conn "users"
+                 {:admin_event_log
+                  (str (merge
+                        event-log
+                        {:timestamp (quot (System/currentTimeMillis) 1000)
+                         :admin_id admin_id
+                         :action "adjust_referral_gallons"
+                         :previous_value (:referral_gallons db-user)
+                         :comment "There was a failure updating gallons"}))}
+                 {:id (:id db-user)})
+        (assoc update-result :id (:id db-user))))
     {:success false
      :validation (b/validate user user-validations)}))
 
