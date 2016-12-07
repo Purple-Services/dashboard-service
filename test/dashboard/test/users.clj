@@ -54,7 +54,10 @@
                                               :referral-comment
                                               "Credit for lack of service"
                                               :admin_id dash-user-id)))))
-
+    (testing "Check that user's gallons has actually been updated"
+      (is (= 5.0
+             (:referral_gallons (first (db/!select db-conn "users" ["*"]
+                                                   {:email user-email}))))))
     (testing "User can be converted to a courier"
       (is (:success
            (users/convert-to-courier! db-conn server-user))))))
