@@ -53,4 +53,8 @@
                                               :referral_gallons 5
                                               :referral-comment
                                               "Credit for lack of service"
-                                              :admin_id dash-user-id)))))))
+                                              :admin_id dash-user-id)))))
+
+    (testing "User can be converted to a courier"
+      (is (:success
+           (users/convert-to-courier! db-conn server-user))))))
