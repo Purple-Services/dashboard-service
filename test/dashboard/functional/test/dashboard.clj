@@ -486,8 +486,13 @@
       (click save-button)
       (wait-until #(exists? yes-button))
       (click yes-button)
-      (wait-until #(exists? {:xpath "//td[text()='Bar']"}))
-      (is (exists? {:xpath "//td[text()='Bar']"})))
+      (wait-until
+       #(exists?
+         {:xpath "//table//th[text()='Rank']/../../..//tr/td/span[text()='Bar']"
+          }))
+      (is (exists?
+           {:xpath
+            "//table//th[text()='Rank']/../../..//tr/td/span[text()='Bar']"})))
     (testing "A user fails to edit a zone if their definition is stale"
       ;; try to edit the delivery times
       (wait-until #(exists? zones-edit-button))
