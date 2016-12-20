@@ -7,6 +7,7 @@
             [common.db :as db]
             [common.util :as util]
             [crypto.password.bcrypt :as bcrypt]
+            [dashboard.login :as login]
             [dashboard.test.db-tools :refer [setup-ebdb-test-for-conn-fixture
                                              setup-ebdb-test-pool!
                                              clear-and-populate-test-database
@@ -215,3 +216,66 @@
                :lng lng
                :last_ping (quot (c/to-long (l/local-now)) 1000)}
               {:id (:id courier)}))
+
+(defn create-minimal-dash-user!
+  "Given a map of:
+  {:email     <email>
+   :password  <password>
+   :full-name <fullname>
+   :db-conn   <db-conn>}
+  Create a Dash user with minimal permissions"
+  [{:keys [email password full-name db-conn]}]
+  ;; create a new dash user
+  (create-dash-user! {:db-conn db-conn
+                      :platform-id email
+                      :password password
+                      :full-name full-name})
+  ;; give very minimal perms
+  (give-perms!
+   {:user (login/get-user-by-email
+           db-conn email)
+    :db-conn db-conn
+    :perms "view-dash,view-couriers,view-users,view-zones,view-orders"}))
+
+(defn create-app-user-vehicle-order!
+  "Given a map of:
+  {:email    <email>
+  :password  <password>
+  :full-name <fullname>
+  :db-conn   <db-conn>}
+  create a minimal app user who has a vehicle registered with one order"
+  [{:keys [email password full-name db-conn]}]
+  (let [
+        ;; create the native app user
+        _ (register-user! {:db-conn db-conn
+                           :platform-id email
+                           :password password
+                           :full-name full-name})
+        user (first (db/!select db-conn "users" ["*"] {:email email}))
+        ;; create the user vehicle
+        vehicle (vehicle-map {:user_id (:id user)})
+        _ (create-vehicle! db-conn vehicle user)
+        ;; create an order
+        order (order-map {:user_id (:id user)
+                          :vehicle_id (:id vehicle)})
+        _ (create-order! (db/conn) order)]))
+
+(defn create-minimal-dash-env!
+  "Given a map of:
+  {:dash-user {:email <email>
+               :password <password>
+               :full-name <dashboard user full name>
+              }
+   :app-user {:email <email>
+              :password <password>
+              :full-name <app user full name>
+             }
+   :db-conn <db-conn>
+  }
+
+  create the minial dash environment needed to run tests. This
+  includes creating a dashboard user, creating an app user with a vehicle
+  and one order"
+  [{:keys [dash-user app-user db-conn]}]
+  (create-minimal-dash-user! (assoc dash-user :db-conn db-conn))
+  (create-app-user-vehicle-order! (assoc app-user :db-conn db-conn)))

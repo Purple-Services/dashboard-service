@@ -1,9 +1,7 @@
 (ns dashboard.functional.test.dashboard
   (:require [clj-webdriver.taxi :refer :all]
-            [clojure.string :as string]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [common.db :as db]
-            [environ.core :refer [env]]
             [dashboard.functional.test.selenium :as selenium]
             [dashboard.handler]
             [dashboard.login :as login]
@@ -186,70 +184,6 @@
       (selenium/logout-dashboard)
       (is (exists? (find-element selenium/login-button))))))
 
-
-(defn create-minimal-dash-user!
-  "Given a map of:
-  {:email     <email>
-   :password  <password>
-   :full-name <fullname>
-   :db-conn   <db-conn>}
-  Create a Dash user with minimal permissions"
-  [{:keys [email password full-name db-conn]}]
-  ;; create a new dash user
-  (data-tools/create-dash-user! {:db-conn db-conn
-                                 :platform-id email
-                                 :password password
-                                 :full-name full-name})
-  ;; give very minimal perms
-  (data-tools/give-perms!
-   {:user (login/get-user-by-email
-           db-conn email)
-    :db-conn db-conn
-    :perms "view-dash,view-couriers,view-users,view-zones,view-orders"}))
-
-(defn create-app-user-vehicle-order!
-  "Given a map of:
-  {:email    <email>
-  :password  <password>
-  :full-name <fullname>
-  :db-conn   <db-conn>}
-  create a minimal app user who has a vehicle registered with one order"
-  [{:keys [email password full-name db-conn]}]
-  (let [
-        ;; create the native app user
-        _ (data-tools/register-user! {:db-conn db-conn
-                                      :platform-id email
-                                      :password password
-                                      :full-name full-name})
-        user (first (db/!select db-conn "users" ["*"] {:email email}))
-        ;; create the user vehicle
-        vehicle (data-tools/vehicle-map {:user_id (:id user)})
-        _ (data-tools/create-vehicle! db-conn vehicle user)
-        ;; create an order
-        order (data-tools/order-map {:user_id (:id user)
-                                     :vehicle_id (:id vehicle)})
-        _ (data-tools/create-order! (db/conn) order)]))
-
-(defn create-minimal-dash-env!
-  "Given a map of:
-  {:dash-user {:email <email>
-               :password <password>
-               :full-name <dashboard user full name>
-              }
-   :app-user {:email <email>
-              :password <password>
-              :full-name <app user full name>
-             }
-   :db-conn <db-conn>
-  }
-
-  create the minial dash environment needed to run tests. This
-  includes creating a dashboard user, creating an app user with a vehicle
-  and one order"
-  [{:keys [dash-user app-user db-conn]}]
-  (create-minimal-dash-user! (assoc dash-user :db-conn db-conn))
-  (create-app-user-vehicle-order! (assoc app-user :db-conn db-conn)))
-
 (defn create-zone!
   "Given a map:
   {:name <str>
@@ -284,15 +218,11 @@
                         :password "bazqux"
                         :full-name "Baz Qux"}
         db-conn        (db/conn)
-        _ (create-minimal-dash-env! {:dash-user dash-user
-                                     :app-user app-user
-                                     :db-conn db-conn})
+        _ (data-tools/create-minimal-dash-env! {:dash-user dash-user
+                                              :app-user app-user
+                                              :db-conn db-conn})
         dash-user-id (:id (login/get-user-by-email db-conn "foo@bar.com"))
         ]
-    ;; setup the env
-    (create-minimal-dash-env! {:dash-user dash-user
-                               :app-user app-user
-                               :db-conn db-conn})
     ;; login the dash user
     (selenium/login-dashboard (:email dash-user) (:password dash-user))
     (wait-until #(exists? home-tab))
