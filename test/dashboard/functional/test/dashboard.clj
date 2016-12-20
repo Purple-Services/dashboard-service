@@ -4,6 +4,7 @@
             [clojure.test :refer [deftest is testing use-fixtures]]
             [common.db :as db]
             [environ.core :refer [env]]
+            [dashboard.functional.test.selenium :as selenium]
             [dashboard.handler]
             [dashboard.login :as login]
             [dashboard.users :as users]
@@ -12,52 +13,19 @@
                                              clear-test-database
                                              setup-ebdb-test-for-conn-fixture
                                              clear-and-populate-test-database
-                                             clear-and-populate-test-database-fixture]]
+                                             clear-and-populate-test-database-fixture
+                                             reset-db!]]
             [dashboard.test.zones :as test-zones]
             [dashboard.zones :as zones]
             [ring.adapter.jetty :refer [run-jetty]]))
 
-;; note: you will need a bit of elisp in order be able to use load the file
-;; without having the vars named improperly
-;; here is an example of what you will need below:
-;; (defun portal-clj-reset ()
-;;   (when (string= (buffer-name) "dashboard.clj")
-;;     (cider-interactive-eval
-;;      "(reset-vars!)")))
-;; (add-hook 'cider-mode-hook
-;; 	  (lambda ()
-;; 	    (add-hook 'cider-file-loaded-hook 'portal-clj-reset)))
-
 ;; for manual testing:
-;; (setup-test-env!) ; make sure profiles.clj was loaded with
+;; (selenium/setup-test-env!) ; make sure profiles.clj was loaded with
 ;;                   ; :base-url "http:localhost:5746/"
 ;; -- run tests --
 ;; (reset-db!) ; note: most tests will need this run between them anyhow
 ;; -- run more tests
-;; (stop-server server)
-;; (stop-browser)
-
-
-;; normally, the test server runs on port 3000. If you would like to manually
-;; run tests, you can set this to (def test-port 3000) in the repl
-;; just reload this file (C-c C-l in cider) when running
-(def test-port 5747)
-(def test-base-url (str "http://localhost:" test-port "/"))
-(def base-url test-base-url)
-
-
-;; common elements
-(def logout-lg-xpath
-  {:xpath "//ul/li[contains(@class,'hidden-lg')]//a[text()='Logout']"})
-(def logout-sm-xpath
-  {:xpath "//ul[contains(@class,'hidden-xs')]/li//a[text()='Logout']"})
-
-(def login-button {:xpath "//button[@id='login']"})
-
-(def login-email-input
-  {:xpath "//input[@id='email']"})
-(def login-password-input
-  {:xpath "//input[@id='password']"})
+;; (selenium/shutdown-test-env!
 
 (def home-tab {:xpath "//li/a/div[text()='Home']"})
 
@@ -99,126 +67,24 @@
 (def one-hour-checkbox
   {:xpath "//label[text()='Delivery Times Available']/parent::div//div[text()='1 Hour ']/input[@type='checkbox']"})
 
-(defn start-server [port]
-  (let [_ (setup-ebdb-test-pool!)
-        server (run-jetty #'dashboard.handler/handler
-                          {:port port
-                           :join? false
-                           })]
-    server))
-
-(defn stop-server [server]
-  (do
-    (clear-test-database)
-    ;; close out the db connection
-    (.close (:datasource (db/conn)))
-    (.stop server)))
-
-(defn with-server [t]
-  (let [server (start-server test-port)]
-    (t)
-    (stop-server server)))
-
-(defn start-browser []
-  (set-driver! {:browser :chrome}))
-
-(defn stop-browser []
-  (quit))
-
-(defn with-browser [t]
-  (start-browser)
-  (t)
-  (stop-browser))
-
-(defn with-redefs-fixture [t]
-  (with-redefs [common.config/base-url test-base-url]
-    (t)))
-
-(use-fixtures :once with-server with-browser with-redefs-fixture
+(use-fixtures :once selenium/with-server selenium/with-browser
+  selenium/with-redefs-fixture
   setup-ebdb-test-for-conn-fixture)
 (use-fixtures :each clear-and-populate-test-database-fixture)
 
-;; beging fns for testing at the repl
-(defn reset-vars!
-  []
-  (def base-url (env :base-url))
-  ;; obviously means that :base-url will use port 5744
-  (def test-port 5746))
-
-(defn set-server!
-  []
-  (def server (start-server test-port))
-  (setup-ebdb-test-pool!))
-
-(defn setup-test-env!
-  []
-  (reset-vars!)
-  (set-server!)
-  (start-browser))
-
-(defn reset-db! []
-  (clear-and-populate-test-database))
-
 ;; end fns for testing at the repl
-
-;; this function is used to slow down clojure so the browser has time to catch
-;; up. If you are having problems with tests passing, particuarly if they appear
-;; to randomly fail, try increasing the amount of sleep time before the call
-;; that is failing
-(defn sleep
-  "Sleep for ms."
-  [& [ms]]
-  (let [default-ms 700
-        time (or ms default-ms)]
-    (Thread/sleep time)))
-
-(defn go-to-login-page
-  "Navigate to the portal"
-  []
-  (to (str base-url "login")))
-
-(defn go-to-uri
-  "Given an uri, go to it"
-  [uri]
-  (to (str base-url uri)))
-
-
-(defn login-dashboard
-  "Login with the client using email and password as credentials"
-  [email password]
-  (go-to-uri "login")
-  (let [email-input    (find-element login-email-input)
-        password-input (find-element {:xpath "//input[@type='password']"})]
-    (input-text email-input email)
-    (input-text password-input password)
-    (click (find-element login-button))))
-
-(defn logout-dashboard
-  "Logout, assuming the portal has already been logged into"
-  []
-  (click (if (visible? (find-element logout-lg-xpath))
-           (find-element logout-lg-xpath)
-           (find-element logout-sm-xpath))))
 
 (defn check-error-alert
   "Wait for an error alert to appear and test that it says msg"
   [msg]
-  (let [alert-danger {:xpath "//div[contains(@class,'alert-danger')]"}]
-    (wait-until #(exists?
-                  alert-danger))
-    (is (= msg
-           (text (find-element
-                  alert-danger))))))
+  (is (= msg
+         (selenium/get-error-alert))))
 
 (defn check-success-alert
   "Wait for an error alert to appear and test that it says msg"
   [msg]
-  (let [alert-danger {:xpath "//div[contains(@class,'alert-success')]"}]
-    (wait-until #(exists?
-                  alert-danger))
-    (is (= msg
-           (text (find-element
-                  alert-danger))))))
+  (is (= msg
+         (selenium/get-success-alert))))
 
 (defn set-minimum-dash-env!
   []
@@ -270,8 +136,8 @@
                                      :courier_id (:id courier)})
         _ (data-tools/create-order! (db/conn) order)
         logout {:xpath "//a[text()='Logout']"}]
-    (go-to-uri "login")
-    (login-dashboard dash-email dash-password)
+    (selenium/go-to-uri "login")
+    (selenium/login-dashboard dash-email dash-password)
     (wait-until #(exists? logout))))
 
 (deftest login-tests
@@ -296,8 +162,8 @@
         error-message {:xpath "//div[@id='error-message']"}
         ]
     (testing "Login with a username and password that doesn't exist"
-      (go-to-uri "login")
-      (login-dashboard email password)
+      (selenium/go-to-uri "login")
+      (selenium/login-dashboard email password)
       (wait-until #(exists? error-message))
       (is (= "Error: Incorrect email / password combination."
              (text (find-element error-message)))))
@@ -313,12 +179,12 @@
         :db-conn db-conn
         :perms "view-dash,view-couriers,view-users,view-zones,view-orders"})
       ;; create a user, vehicle and order
-      (go-to-uri "login")
-      (login-dashboard email password)
+      (selenium/go-to-uri "login")
+      (selenium/login-dashboard email password)
       (wait-until #(exists? logout)))
     (testing "Log back out."
-      (logout-dashboard)
-      (is (exists? (find-element login-button))))))
+      (selenium/logout-dashboard)
+      (is (exists? (find-element selenium/login-button))))))
 
 
 (defn create-minimal-dash-user!
@@ -428,7 +294,7 @@
                                :app-user app-user
                                :db-conn db-conn})
     ;; login the dash user
-    (login-dashboard (:email dash-user) (:password dash-user))
+    (selenium/login-dashboard (:email dash-user) (:password dash-user))
     (wait-until #(exists? home-tab))
     (testing "Zones is not viewable by a dashboard user without proper perms"
       (data-tools/give-perms!
