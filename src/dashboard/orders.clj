@@ -13,6 +13,7 @@
             [common.util :refer [in? map->java-hash-map split-on-comma]]
             [common.zones :refer [get-zip-def order->zones]]
             [common.orders :as orders]
+            [dashboard.db :as db]
             [dashboard.zones :refer [get-all-zones-from-db]]))
 
 (def orders-select
@@ -178,6 +179,30 @@
                :admin_event_log (edn/read-string (:admin_event_log %)))
        orders))
 
+(defn include-first-order
+  "Add the boolean first_order? to all orders indicating whether or not this is
+  the first order for the user"
+  [db-conn orders]
+  (let [users-string (str "(\""
+                          (s/join "\",\"" (map :user_id orders))
+                          "\")")
+        sql-string (str "SELECT users.id,"
+                        "if(0 = ifnull(o.count,0),1,0) as first_order "
+                        "FROM users LEFT JOIN "
+                        "(SELECT count(id) as count,user_id FROM orders "
+                        "WHERE status = 'complete' "
+                        "AND user_id in " users-string " GROUP BY user_id) o "
+                        "ON o.user_id = users.id "
+                        "WHERE users.id IN " users-string ";")
+        first-time-ordered-results (db/raw-sql-query db-conn [sql-string])
+        get-by-id (fn [id] (first (filter #(= id (:id %))
+                                          first-time-ordered-results)))]
+    (map #(assoc %
+                 :first_order? (if (= (:first_order (get-by-id (:user_id %))) 1)
+                                 true
+                                 false))
+         orders)))
+
 (def order-validations
   {:notes [[v/string :message "Note must be a string!"]
            [v/string :message "Cancellation reason must be a string!"]]})
@@ -260,7 +285,8 @@
        (include-vehicle db-conn)
        (include-zone-info db-conn)
        (include-was-late)
-       (admin-event-log-str->edn)))
+       (admin-event-log-str->edn)
+       (include-first-order db-conn)))
 
 (defn cancel-order
   "Cancel an order and create an entry in the admin_event_log"

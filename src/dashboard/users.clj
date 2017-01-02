@@ -211,7 +211,6 @@
         current-user (first (!select db-conn "users" users-select
                                      {:id (:id user)}))
         is-native?  (boolean (= (:type current-user) "native"))]
-    (println (:type current-user))
     (cond (not is-native?)
           {:success false
            :message (str "This user registered with " (:type current-user) ". "

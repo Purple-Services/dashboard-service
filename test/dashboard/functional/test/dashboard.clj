@@ -115,13 +115,12 @@
         courier-password "courier"
         courier-full-name "Purple Courier"
         ;; create the courier
-        _ (data-tools/register-user! {:db-conn db-conn
-                                      :platform-id courier-email
-                                      :password courier-password
-                                      :full-name courier-full-name})
+        _ (data-tools/register-courier! {:db-conn db-conn
+                                         :platform-id courier-email
+                                         :password courier-password
+                                         :full-name courier-full-name})
         courier (first (db/!select db-conn "users" ["*"]
                                    {:email courier-email}))
-        _ (users/convert-to-courier! db-conn courier)
         ;; put courier on the map
         _ (data-tools/update-courier-position! {:db-conn db-conn
                                                 :courier courier})
@@ -219,8 +218,8 @@
                         :full-name "Baz Qux"}
         db-conn        (db/conn)
         _ (data-tools/create-minimal-dash-env! {:dash-user dash-user
-                                              :app-user app-user
-                                              :db-conn db-conn})
+                                                :app-user app-user
+                                                :db-conn db-conn})
         dash-user-id (:id (login/get-user-by-email db-conn "foo@bar.com"))
         ]
     ;; login the dash user

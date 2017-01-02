@@ -8,6 +8,7 @@
             [common.util :as util]
             [crypto.password.bcrypt :as bcrypt]
             [dashboard.login :as login]
+            [dashboard.users :as users]
             [dashboard.test.db-tools :refer [setup-ebdb-test-for-conn-fixture
                                              setup-ebdb-test-pool!
                                              clear-and-populate-test-database
@@ -37,6 +38,16 @@
                              :phone_number ""
                              :phone_number_verified 0
                              :name full-name}))))
+(defn register-courier!
+  "Create a courier. new-courier hash-map is equivalent to the arguments to
+  register-user!"
+  [new-courier]
+  (register-user! new-courier)
+  (let [db-conn (:db-conn new-courier)
+        courier
+        (first (db/!select (:db-conn new-courier) "users" ["*"]
+                           {:email (:platform-id new-courier)}))]
+    (is (:success (users/convert-to-courier! db-conn courier)))))
 
 (defn vehicle-map
   "Given vehicle information, create a vehicle map for it"
@@ -146,40 +157,6 @@
   [db-conn order]
   (is (:success (db/!insert db-conn "orders"
                             order))))
-;; (defn test-order
-;;   "Create a test order."
-;;   [db-config]
-;;   (let [test-user (first (!select db-config "users" ["*"]
-;;                                   {:email "test@test.com"}))
-;;         user-id   (:id test-user)
-;;         vehicle-id (:id
-;;                     (first
-;;                      (sort-by :timestamp_created
-;;                               (!select db-config "vehicles" ["*"]
-;;                                        {:user_id user-id
-;;                                         :active 1}))))
-;;         delivery-time "180"
-;;         zip "90210"
-;;         octane "87"
-;;         gallons 10
-;;         service-fee 399
-;;         gas-price 309
-;;         total-price (+ (* gallons gas-price) service-fee)
-;;         order {:time delivery-time
-;;                :vehicle_id vehicle-id
-;;                :address_street "123 Foo Br"
-;;                :special_instructions ""
-;;                :service_fee service-fee
-;;                :total_price total-price
-;;                :coupon_code ""
-;;                :gas_price gas-price
-;;                :gallons gallons
-;;                :gas_type octane
-;;                :lat (str "34.0" (rand-int 9))
-;;                :lng (str "-118.4" (rand-int 9) )
-;;                :address_zip zip
-;;                :user_id user-id}]
-;;     order))
 
 (defn give-perms!
   "Given an existing user, add perms to that user"

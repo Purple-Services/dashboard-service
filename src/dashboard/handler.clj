@@ -29,6 +29,7 @@
                                       include-vehicle
                                       include-was-late
                                       include-zone-info
+                                      include-first-order
                                       admin-event-log-str->edn
                                       orders-since-date
                                       search-orders
@@ -466,11 +467,11 @@
          (response
           (update-zone! (conn) b admin-id))))
   (POST "/zone" [:as {body :body
-                     cookies :cookies}]
+                      cookies :cookies}]
         (let [b (keywordize-keys body)
               admin-id (-> (keywordize-keys cookies)
-                          :user-id
-                          :value)]
+                           :user-id
+                           :value)]
           (response
            (create-zone! (conn) b admin-id))))
   ;; return all zones - not used this way anymore
@@ -497,18 +498,20 @@
   ;; order
   (GET "/order/:id"  [id]
        (response
-        (let [order (orders/get-by-id (conn) id)]
+        (let [db-conn (conn)
+              order (orders/get-by-id db-conn id)]
           (if ((comp not empty?) order)
             (into []
                   (->>
                    [order]
                    (include-user-name-phone-and-courier
-                    (conn))
-                   (include-vehicle (conn))
-                   (include-zone-info (conn))
-                   (include-eta (conn))
+                    db-conn)
+                   (include-vehicle db-conn)
+                   (include-zone-info db-conn)
+                   (include-eta db-conn)
                    (include-was-late)
-                   (admin-event-log-str->edn)))))))
+                   (admin-event-log-str->edn)
+                   (include-first-order db-conn)))))))
   ;; edit an order
   (PUT "/order" [:as {body :body
                       cookies :cookies}]
