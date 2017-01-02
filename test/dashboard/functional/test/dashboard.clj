@@ -18,12 +18,17 @@
             [ring.adapter.jetty :refer [run-jetty]]))
 
 ;; for manual testing:
-;; (selenium/setup-test-env!) ; make sure profiles.clj was loaded with
+;; (selenium/startup-test-env!) ; make sure profiles.clj was loaded with
 ;;                   ; :base-url "http:localhost:5746/"
 ;; -- run tests --
 ;; (reset-db!) ; note: most tests will need this run between them anyhow
 ;; -- run more tests
 ;; (selenium/shutdown-test-env!
+
+(use-fixtures :once selenium/with-server selenium/with-browser
+  selenium/with-redefs-fixture
+  setup-ebdb-test-for-conn-fixture)
+(use-fixtures :each clear-and-populate-test-database-fixture)
 
 (def home-tab {:xpath "//li/a/div[text()='Home']"})
 
@@ -64,11 +69,6 @@
 
 (def one-hour-checkbox
   {:xpath "//label[text()='Delivery Times Available']/parent::div//div[text()='1 Hour ']/input[@type='checkbox']"})
-
-(use-fixtures :once selenium/with-server selenium/with-browser
-  selenium/with-redefs-fixture
-  setup-ebdb-test-for-conn-fixture)
-(use-fixtures :each clear-and-populate-test-database-fixture)
 
 ;; end fns for testing at the repl
 
