@@ -3,61 +3,133 @@
 # Dashboard Service
 Dashboard API + logic specific to dashboard.
 
-## Runing the server
+# Getting started
 
-profiles.clj:
+## Download the code
+
+There a few git repos that make up the Purple ecosystem. Create a "Purple-Services"
+dir somewhere in your home dir or other appropriate place to keep all of the repos.
+
+These repos make up the clojure server-side code:
+
+Git repo: Purple-Services/common
+CLojure project name: common
+Description: library containing majority of logic (used by web/dashboard-service) + database calls + misc
+
+Git repo: Purple-Services/opt
+Clojure project name: opt
+Description: library containing optimization logic (auto-assign heuristics, gas station planning, gas station list aggregation code).
+
+Git repo: Purple-Services/dashboard-service
+Clojure project name: dashboard
+Description: dashboard api + logic specific to dashboard
+
+Git repo: Purple-Services/app-service
+Clojure project name: app
+Description: mobile app api + logic specific to mobile app
+
+**Note: You will need the app-service repo for setting up the local database
+
+## opt and common libraries installation and configuration
+
+Clone all of these repos to your Purple-Services dir. The common and opt libraries must be installed into your local repository with the following commands:
+
+```bash
+~/Purple-Services/common$ lein install
+~/Purple-Services/opt$ lein install
+```
+
+There should be little, if any, editing of these two libraries during development. However, sometimes common
+must be developed in parallel to dashboard-service or app-service. Use the checkouts/ dir (https://github.com/technomancy/leiningen/blob/master/doc/TUTORIAL.md#checkout-dependencies) to facilitate this by linking to your local repos with ln.
+
+```bash
+~/Purple-Services/dashboard-service/checkouts$ ln -s ~/Purple-Services/common common
+~/Purple-Services/dashboard-service/checkouts$ ln -s ~/Purple-Services/opt opt
+```
+
+You'll end up with a dir structure like this in dashboard-service:
+```
+    .
+    |-- project.clj
+    |-- README.md
+    |-- checkouts
+    |   `-- common [link to ~/Purple-Services/common]
+    |   `-- opt    [link to ~/Purple-Services/opt]
+    `-- src
+        `-- app
+            `-- handler.clj
+```
+
+## Request addition of your IP address to RDS
+
+Navigate to https://www.whatismyip.com/ and send your IP address to Chris in order to be added to the AWS RDS. You will have to update your IP address whenever it changes. This step must be completed in order to access the test database so that you will be able to develop locally. This must be done before continuing further if you plan to connect to the development database on AWS as opposed to using your local MySQL database.
+
+## Local MySQL Database Configuration
+
+Follow along with the 'Using a local MySQL Database for Development' section of app-service. This will get the local database setup for testing.
+
+Update the database/ebdb.sql file with the script
+```bash
+$ ~scripts/retrieve_sql_structure_for_tests
+```
+ebdb.sql contains the proper structure for building a database needed to run the tests. Whenever there are database changes, this will need to be run again.
+
+
+## profiles.clj
+
+For local development, <project_root>/profiles.clj is used to define environment variables. However, profiles.clj is included in .gitignore and is not included in the repository. When you first start working on the project, you will have to obtain a profiles.clj from the dev team. You can edit the profiles.clj to match your local environment.
+
+In profiles.clj, the value of :db-host is the database host used for development. If you have MySQL configured on your machine, you can use the value "localhost" with a :db-password that you set. Otherwise, you can use the AWS host and pwd values to access the remote development server. You will eventually need to setup a local MySQL server in order to run tests that access the database. See "Using a local MySQL Database for Development" below on how to configure this.
+
+## Run Tests
+
+There are functional tests that require chrome webdriver in order to pass. Obtain it from 
+https://sites.google.com/a/chromium.org/chromedriver/downloads
+
+You can then test the code with
+
+```bash
+$ lein ring server
+```
+
+# Development
+
+## Database Setup
+
+You can build a local ebdb_dev MySQL database with *scripts/sync_dev_db*. Edit *scripts/retrieve_dev_db_data* to include your credentials.
+
+Edit the :db-* keywords in profiles.clj to correspond to local database access.
+
+## Start the server
+
+The Clojure dashboard server is developed in tandem with the ClojureScript dashboard-cljs client. In order to run the server, edit profiles.clj to set the port used for the server to 3001:
 
 ```clojure
-{:dev { :env {:aws-access-key-id "ANYTHINGWHENLOCAL"
-              :aws-secret-key "ANYTHINGWHENLOCAL"
-              :db-host "localhost" ; AWS host: "purple-dev-db.cqxql2suz5ru.us-west-2.rds.amazonaws.com"
-              :db-name "ebdb"
-              :db-port "3306"
-              :db-user "purplemaster"
-              :db-password "localpurpledevelopment2015" ; AWS pwd: HHjdnb873HHjsnhhd
-              :email-user "no-reply@purpledelivery.com"
-              :email-password "HJdhj34HJd"
-              :stripe-private-key "sk_test_6Nbxf0bpbBod335kK11SFGw3"
-              :sns-app-arn-apns "arn:aws:sns:us-west-2:336714665684:app/APNS_SANDBOX/Purple" ;; sandbox is also used for couriers on prod
-              :sns-app-arn-gcm  "arn:aws:sns:us-west-2:336714665684:app/GCM/Purple" ;; also used on prod
-              :twilio-account-sid "AC0a0954acca9ba8c527f628a3bfaf1329"
-              :twilio-auto-token "3da1b036da5fb7716a95008c318ff154"
-              :twilio-form-number "+13239243338"
-              ;; 192.168.0.1 is used because it is a IP address on the local LAN
-              ;; that can be accessed from devices connected through the LAN
-              ;; helpful for testing on mobile devices
-              :base-url "http://192.168.0.1:3001/" ;; crucial, must be different than the app-service port!
-              :has-ssl "NO"
-              :segment-write-key "test"
-              :sift-science-api-key "test"
-              :dashboard-google-browser-api-key "AIzaSyA0p8k_hdb6m-xvAOosuYQnkDwjsn8NjFg"
-              :env "dev"}
-       :dependencies [[javax.servlet/servlet-api "2.5"]
-                      [ring-mock "0.1.5"]]}}
+:base-url "http://localhost:3001/"
 ```
 
-The lein-ring plugin has its own entry in project.clj. The server port must be
-different from the default port of 3000 that the app-service server runs on
-if both servers are needed for development. To be on the safe side, run the
-dashboard service on port 3001.
+Start the server for development with:
 
-You can start the server for development with:
-
-```
-lein ring server
+```bash
+$ lein ring server
 ```
 
-## Log in
+## Testing at the repl
 
-If you are using the scripts provided in app-service for building the local
-database, then the following login can be used:
+Both unit and functional tests can be run from the REPL. You will need to modify the :base-url in profiles.clj
 
-u: test@test.com
-p: qwerty123
+```clojure
+:base-url "http://localhost:5746/"
+```
+
+Navigate to a file in dashboard-service and use M-x cider-jack-in in Emacs to connect to the repl.
+
+For example functional tests, see dashboard-service/test/dashboard/functional/test/dashboard.clj
+
+There are comments in the source on how to run the functional tests from the repl.
 
 
-### Edit permissions
+# License
 
-See the comment src/dashboard/handler.clj in dashboard-uri-permissions
-for the permissions needed to access the dashboard. Edit the 'permissions' field
-of a user in `dashboard_users` to enable/disable features.
+Copyright © 2017 Purple Services Inc
+
