@@ -13,7 +13,7 @@ dir somewhere in your home dir or other appropriate place to keep all of the rep
 These repos make up the clojure server-side code:
 
 Git repo: Purple-Services/common
-CLojure project name: common
+Clojure project name: common
 Description: library containing majority of logic (used by web/dashboard-service) + database calls + misc
 
 Git repo: Purple-Services/opt
@@ -28,7 +28,7 @@ Git repo: Purple-Services/app-service
 Clojure project name: app
 Description: mobile app api + logic specific to mobile app
 
-**Note: You will need the app-service repo for setting up the local database
+**Note: You will need the app-service repo for setting up the local database**
 
 ## opt and common libraries installation and configuration
 
@@ -70,7 +70,7 @@ Follow along with the 'Using a local MySQL Database for Development' section of 
 
 Update the database/ebdb.sql file with the script
 ```bash
-$ ~scripts/retrieve_sql_structure_for_tests
+$ scripts/retrieve_sql_structure_for_tests
 ```
 ebdb.sql contains the proper structure for building a database needed to run the tests. Whenever there are database changes, this will need to be run again.
 
@@ -89,7 +89,7 @@ https://sites.google.com/a/chromium.org/chromedriver/downloads
 You can then test the code with
 
 ```bash
-$ lein ring server
+$ lein test
 ```
 
 # Development
