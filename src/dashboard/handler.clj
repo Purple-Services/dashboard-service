@@ -38,6 +38,7 @@
                                       orders-by-user-id
                                       update-status-by-admin
                                       assign-to-courier-by-admin]]
+            [dashboard.fleet :refer [fleet-deliveries-since-date]]
             [dashboard.pages :as pages]
             [dashboard.users :refer [dash-users
                                      process-user
@@ -218,6 +219,10 @@
    {:uri "/orders-since-date"
     :method "POST"
     :permissions ["view-orders"]}
+   ;;!! fleet
+   {:uri "/fleet-deliveries-since-date"
+    :method "POST"
+    :permissions ["view-fleet"]}
    ;;!! analytics
    {:uri "/total-orders-customer"
     :method "GET"
@@ -556,6 +561,14 @@
            (orders-since-date (conn)
                               (:date b)
                               (:unix-epoch? b)))))
+  ;; given a date in the format yyyy-mm-dd, return all orders
+  ;; that have occurred since then
+  (POST "/fleet-deliveries-since-date" {body :body}
+        (response
+         (let [b (keywordize-keys body)]
+           (fleet-deliveries-since-date (conn)
+                                        (:date b)
+                                        (:unix-epoch? b)))))
   ;;!! analytics
   (POST "/total-orders-customer" {body :body}
         (response (let [b (keywordize-keys body)

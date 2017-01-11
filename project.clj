@@ -33,16 +33,23 @@
                                    {:name "dashboard-dev-env"}]
                     :s3-bucket "leinbeanstalkpurple"
                     :region "us-west-2"}}
-  :profiles {:dev [{:dependencies
-                    [[javax.servlet/servlet-api "2.5"]
-                     [ring/ring-mock "0.3.0"]
-                     [org.seleniumhq.selenium/selenium-java "2.47.1"]
-                     [clj-webdriver "0.7.2"]
-                     [pjstadig/humane-test-output "0.6.0"]]
-                    :injections
-                    [(require 'pjstadig.humane-test-output)
-                     (pjstadig.humane-test-output/activate!)]}
-                   :profiles/local]
+  :profiles {:default [:base :system :user :provided :local]
+             :shared [{:dependencies
+                       [[javax.servlet/servlet-api "2.5"]
+                        [ring/ring-mock "0.3.0"]
+                        [org.seleniumhq.selenium/selenium-java "2.47.1"]
+                        [clj-webdriver "0.7.2"]
+                        [ring "1.5.0"]
+                        [pjstadig/humane-test-output "0.6.0"]]
+                       :injections
+                       [(require 'pjstadig.humane-test-output)
+                        (pjstadig.humane-test-output/activate!)]}]
+             :local [:shared :profiles/local
+                     {:env {:base-url "http://localhost:3001/"}}]
+             :dev [:shared :profiles/dev
+                   {:env {:base-url "http://localhost:3001/"}}]
+             :prod [:shared :profiles/prod
+                    {:env {:base-url "http://localhost:3001/"}}]
              :app-integration-test {:env {:test-db-host "localhost"
                                           :test-db-name "ebdb_test"
                                           :test-db-port "3306"
