@@ -967,7 +967,7 @@
                                        (:gas-price %)
                                        (:service-fee %)
                                        (:total-price %)
-                                       (:special-instructions %))
+                                       (s/replace (:special-instructions %) #"\n" " // "))
                               (->> managed-account-orders
                                    (sort-by :timestamp)))))
           report-vectors (fn [managed-account-orders]
