@@ -898,6 +898,7 @@
        "vehicles.year AS `year`, "
        "vehicles.license_plate AS `license-plate`, "
        "orders.license_plate AS `plate-or-stock-no`, "
+       "orders.special_instructions AS `special-instructions`, "
        "orders.gallons AS `gallons`, "
        "orders.gallons - orders.referral_gallons_used AS `gallons-charged`, "
        "ROUND(orders.gas_price / 100, 2) AS `gas-price`, "
@@ -949,7 +950,8 @@
                           "Gallons"
                           "Gallon Price"
                           "Service Fee"
-                          "Total Price"]
+                          "Total Price"
+                          "Special Instructions"]
                          (map #(vector (:timestamp %)
                                        (:delivery-id %)
                                        (:user-name %)
@@ -964,7 +966,8 @@
                                        (:gallons %)
                                        (:gas-price %)
                                        (:service-fee %)
-                                       (:total-price %))
+                                       (:total-price %)
+                                       (:special-instructions %))
                               (->> managed-account-orders
                                    (sort-by :timestamp)))))
           report-vectors (fn [managed-account-orders]
