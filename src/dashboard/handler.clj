@@ -38,7 +38,11 @@
                                       orders-by-user-id
                                       update-status-by-admin
                                       assign-to-courier-by-admin]]
-            [dashboard.fleet :refer [fleet-deliveries-since-date]]
+            [dashboard.fleet :refer [fleet-deliveries-since-date
+                                     update-fleet-delivery!
+                                     approve-fleet-deliveries!
+                                     delete-fleet-deliveries!
+                                     download-fleet-deliveries]]
             [dashboard.pages :as pages]
             [dashboard.users :refer [dash-users
                                      process-user
@@ -109,7 +113,7 @@
 ;; #{"view-dash","view-couriers","edit-couriers","view-users","edit-users,
 ;;   "send-push","view-coupons","edit-coupons","create-coupons","view-zones",
 ;;   "edit-zones", "view-orders","edit-orders","download-stats",
-;;   "convert-to-courier"}
+;;   "convert-to-courier","view-fleet","edit-fleet"}
 ;;
 (def dashboard-uri-permissions
   [
@@ -221,6 +225,18 @@
     :permissions ["view-orders"]}
    ;;!! fleet
    {:uri "/fleet-deliveries-since-date"
+    :method "POST"
+    :permissions ["view-fleet"]}
+   {:uri "/fleet-delivery"
+    :method "PUT"
+    :permissions ["edit-fleet"]}
+   {:uri "/approve-fleet-deliveries"
+    :method "PUT"
+    :permissions ["edit-fleet"]}
+   {:uri "/delete-fleet-deliveries"
+    :method "DELETE"
+    :permissions ["edit-fleet"]}
+   {:uri "/download-fleet-deliveries"
     :method "POST"
     :permissions ["view-fleet"]}
    ;;!! analytics
@@ -569,6 +585,20 @@
            (fleet-deliveries-since-date (conn)
                                         (:date b)
                                         (:unix-epoch? b)))))
+  ;; edit an existing delivery
+  (PUT "/fleet-delivery" {body :body}
+       (let [b (keywordize-keys body)]
+         (response
+          (update-fleet-delivery! (conn) b))))
+  (PUT "/approve-fleet-deliveries" {body :body}
+       (let [b (keywordize-keys body)]
+         (response (approve-fleet-deliveries! (conn) (:fleet-delivery-ids b)))))
+  (DELETE "/delete-fleet-deliveries" {body :body}
+       (let [b (keywordize-keys body)]
+         (response (delete-fleet-deliveries! (conn) (:fleet-delivery-ids b)))))
+  (POST "/download-fleet-deliveries" {body :body}
+       (let [b (keywordize-keys body)]
+         (response (download-fleet-deliveries (conn) (:fleet-delivery-ids b)))))
   ;;!! analytics
   (POST "/total-orders-customer" {body :body}
         (response (let [b (keywordize-keys body)
