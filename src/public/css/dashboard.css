@@ -121,3 +121,7 @@ tbody > tr.active > td {
 .courier-inactive {
     color: #ff0000;
 }
+
+button:focus {
+    outline: 0 !important;
+}

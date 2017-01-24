@@ -63,7 +63,8 @@
             [ring.middleware.cors :refer [wrap-cors]]
             [ring.middleware.ssl :refer [wrap-ssl-redirect]]
             [dk.ative.docjure.spreadsheet :as spreadsheet]
-            ))
+            [cemerick.url :refer [url-decode]]
+            [clojure.edn :as edn]))
 
 (defn wrap-page [resp]
   (header resp "content-type" "text/html; charset=utf-8"))
@@ -594,11 +595,23 @@
        (let [b (keywordize-keys body)]
          (response (approve-fleet-deliveries! (conn) (:fleet-delivery-ids b)))))
   (DELETE "/delete-fleet-deliveries" {body :body}
-       (let [b (keywordize-keys body)]
-         (response (delete-fleet-deliveries! (conn) (:fleet-delivery-ids b)))))
-  (POST "/download-fleet-deliveries" {body :body}
-       (let [b (keywordize-keys body)]
-         (response (download-fleet-deliveries (conn) (:fleet-delivery-ids b)))))
+          (let [b (keywordize-keys body)]
+            (response (delete-fleet-deliveries! (conn) (:fleet-delivery-ids b)))))
+  (POST "/download-fleet-deliveries" req
+        (-> (response (download-fleet-deliveries (conn)
+                                                 (-> req
+                                                     ring.util.request/body-string
+                                                     url-decode
+                                                     (subs 19)
+                                                     edn/read-string)))
+            (header "Content-Type"
+                    (str "application/vnd.openxmlformats-officedocument."
+                         "spreadsheetml.sheet"
+                         " name=\""
+                         "fleet-deliveries.csv" "\""))
+            (header "Content-Disposition"
+                    (str "attachment; filename=\""
+                         "fleet-deliveries.csv" "\""))))
   ;;!! analytics
   (POST "/total-orders-customer" {body :body}
         (response (let [b (keywordize-keys body)
@@ -720,12 +733,11 @@
   (GET "/ok" [] (response {:success true})))
 
 (def handler
-  (->
-   all-routes
-   (wrap-cors :access-control-allow-origin [#".*"]
-              :access-control-allow-methods [:get :put :post :delete])
-   (wrap-access-rules {:rules access-rules})
-   (wrap-access-rules {:rules login-rules})
-   (wrap-cookies)
-   (wrap-json-body)
-   (wrap-json-response)))
+  (-> all-routes
+      (wrap-cors :access-control-allow-origin [#".*"]
+                 :access-control-allow-methods [:get :put :post :delete])
+      (wrap-access-rules {:rules access-rules})
+      (wrap-access-rules {:rules login-rules})
+      (wrap-cookies)
+      (wrap-json-body)
+      (wrap-json-response)))

@@ -1,21 +1,26 @@
 (ns dashboard.fleet
-  (:require [clojure.java.jdbc :as sql]
-            [common.db :refer [conn !select !update mysql-escape-str]]
-            [bouncer.core :as b]
-            [bouncer.validators :as v]
-            [clojure.algo.generic.functor :refer [fmap]]
-            [clojure.edn :as edn]
-            [clojure.string :as s]
-            [clojure.walk :refer [stringify-keys]]
+  (:require [common.db :refer [conn !select !update mysql-escape-str]]
             [opt.planner :refer [compute-distance]]
             [common.config :as config]
             [common.couriers :as couriers]
             [common.users :as users]
-            [common.util :refer [in? map->java-hash-map split-on-comma]]
+            [common.util :refer [in? map->java-hash-map split-on-comma cents->dollars-str]]
             [common.zones :refer [get-zip-def order->zones]]
             [common.orders :as orders]
             [dashboard.db :as db]
-            [dashboard.zones :refer [get-all-zones-from-db]]))
+            [dashboard.zones :refer [get-all-zones-from-db]]
+            [clojure.java.jdbc :as sql]
+            [bouncer.core :as b]
+            [bouncer.validators :as v]
+            [clojure.algo.generic.functor :refer [fmap]]
+            [clojure.edn :as edn]
+            [clojure.data.csv :as csv]
+            
+            [clojure.java.io :as io]
+            [ring.util.io :as ring-io]
+            
+            [clojure.string :as s]
+            [clojure.walk :refer [stringify-keys]]))
 
 
 
@@ -28,7 +33,7 @@
                           [(str "SELECT accounts.name as `account_name`, "
                                 "fleet_locations.account_id as `account_id`, "
                                 "fleet_locations.name as `fleet_location_name`, "
-                                "users.name as `courier_id`, "
+                                "users.name as `courier_name`, "
                                 "fleet_deliveries.id as `id`, "
                                 "fleet_deliveries.fleet_location_id as `fleet_location_id`, "
                                 "fleet_deliveries.timestamp_created as `timestamp_created`, "
@@ -94,13 +99,74 @@
 
 (defn download-fleet-deliveries
   [db-conn ids]
-  (let [result (!select db-conn
-                        "fleet_deliveries"
-                        ["*"] {}
-                        :custom-where
-                        (str "id IN (\""
-                             (s/join "\",\"" (map mysql-escape-str ids))
-                             "\")"))
-        _ (println result)]
-    {:success true} ;; need to send back CSV here?
-    ))
+  (let [results (db/raw-sql-query
+                 db-conn
+                 [(str "SELECT accounts.name as `account_name`, "
+                       "fleet_locations.account_id as `account_id`, "
+                       "fleet_locations.name as `fleet_location_name`, "
+                       "users.name as `courier_name`, "
+                       "fleet_deliveries.id as `id`, "
+                       "fleet_deliveries.fleet_location_id as `fleet_location_id`, "
+                       "date_format(convert_tz(fleet_deliveries.timestamp_created, \"UTC\", "
+                       "\"America/Los_Angeles\"),\"%Y-%m-%d %H:%i:%S\") as `timestamp_created`, "
+                       "fleet_deliveries.year as `year`, "
+                       "fleet_deliveries.make as `make`, "
+                       "fleet_deliveries.model as `model`, "
+                       "fleet_deliveries.vin as `vin`, " 
+                       "fleet_deliveries.license_plate as `license_plate`, "
+                       "fleet_deliveries.gallons as `gallons`, "
+                       "fleet_deliveries.gas_type as `gas_type`, "
+                       "fleet_deliveries.gas_price as `gas_price`, "
+                       "fleet_deliveries.service_fee as `service_fee`, "
+                       "fleet_deliveries.total_price as `total_price`, "
+                       "fleet_deliveries.gas_type as `gas_type`, "
+                       "if(fleet_deliveries.is_top_tier, 'Yes', 'No') as `is_top_tier`, "
+                       "fleet_deliveries.approved as `approved`, "
+                       "fleet_deliveries.deleted as `deleted` "
+                       "FROM `fleet_deliveries` "
+                       "LEFT JOIN fleet_locations ON fleet_locations.id = fleet_deliveries.fleet_location_id "
+                       "LEFT JOIN accounts ON accounts.id = fleet_locations.account_id "
+                       "LEFT JOIN users ON fleet_deliveries.courier_id = users.id "
+                       "WHERE fleet_deliveries.id IN (\""
+                       (s/join "\",\"" (map mysql-escape-str ids))
+                       "\") "
+                       "ORDER BY timestamp_created DESC")])]
+    (ring-io/piped-input-stream
+     (fn [ostream]
+       (let [writer (io/writer ostream)]
+         (csv/write-csv
+          writer
+          (apply vector
+                 (concat [["Timestamp (Pacific)"
+                           "Order ID"
+                           "Location"
+                           "Courier"
+                           "Make"
+                           "Model"
+                           "Year"
+                           "VIN"
+                           "Plate or Stock Number"
+                           "Octane"
+                           "Top Tier?"
+                           "Gallons"
+                           "Gallon Price"
+                           "Total Price"]]
+                         (map (fn [o]
+                                (vec [(:timestamp_created o)
+                                      (:id o)
+                                      (:fleet_location_name o)
+                                      (:courier_name o)
+                                      (:make o)
+                                      (:model o)
+                                      (:year o)
+                                      (:vin o)
+                                      (:license_plate o)
+                                      (:gas_type o)
+                                      (:is_top_tier o)
+                                      (:gallons o)
+                                      (cents->dollars-str (:gas_price o))
+                                      (cents->dollars-str (:total_price o))]))
+                              results))))
+         (.flush writer))))))
+
+
