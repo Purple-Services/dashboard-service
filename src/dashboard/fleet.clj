@@ -27,9 +27,10 @@
 (defn fleet-deliveries-since-date
   "Get all fleet deliveries since date. A blank date will return all orders.
   When unix-epoch? is true, assume date is in unix epoch seconds"
-  [db-conn date & [unix-epoch?]]
-  (cond (not (nil? date))
-        (db/raw-sql-query db-conn
+  [db-conn from-date to-date]
+  (if (and (not (nil? from-date))
+           (not (nil? to-date)))
+    (or (db/raw-sql-query db-conn
                           [(str "SELECT accounts.name as `account_name`, "
                                 "fleet_locations.account_id as `account_id`, "
                                 "fleet_locations.name as `fleet_location_name`, "
@@ -53,14 +54,11 @@
                                 "LEFT JOIN accounts ON accounts.id = fleet_locations.account_id "
                                 "LEFT JOIN users ON fleet_deliveries.courier_id = users.id "
                                 "WHERE fleet_deliveries.timestamp_created >= "
-                                (if unix-epoch?
-                                  (str "FROM_UNIXTIME(" date ")")
-                                  (str "'" date "'")))])
-        
-        (nil? date) []
-        
-        :else {:success false
-               :message "Unknown error occured"}))
+                                (str "'" (mysql-escape-str from-date) "'") " AND "
+                                " fleet_deliveries.timestamp_created <= "
+                                (str "'" (mysql-escape-str to-date) "'"))])
+        [])
+    []))
 
 (def delivery-validations
   {:gallons [v/required]})
@@ -150,6 +148,7 @@
                            "Top Tier?"
                            "Gallons"
                            "Gallon Price"
+                           "Service Fee"
                            "Total Price"]]
                          (map (fn [o]
                                 (vec [(:timestamp_created o)
@@ -165,6 +164,7 @@
                                       (:is_top_tier o)
                                       (:gallons o)
                                       (cents->dollars-str (:gas_price o))
+                                      (cents->dollars-str (:service_fee o))
                                       (cents->dollars-str (:total_price o))]))
                               results))))
          (.flush writer))))))

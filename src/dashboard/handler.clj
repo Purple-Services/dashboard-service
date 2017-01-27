@@ -584,8 +584,8 @@
         (response
          (let [b (keywordize-keys body)]
            (fleet-deliveries-since-date (conn)
-                                        (:date b)
-                                        (:unix-epoch? b)))))
+                                        (:from-date b)
+                                        (:to-date b)))))
   ;; edit an existing delivery
   (PUT "/fleet-delivery" {body :body}
        (let [b (keywordize-keys body)]
