@@ -100,6 +100,10 @@ tbody > tr.active > td {
     background-color: #e5edf9 !important;
 }
 
+tbody > tr.editing > td {
+    background-color: #F5D76E !important;
+}
+
 
 .purple-logo {
     width: 4.5em;

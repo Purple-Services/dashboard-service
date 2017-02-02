@@ -40,6 +40,7 @@
                                       assign-to-courier-by-admin]]
             [dashboard.fleet :refer [fleet-deliveries-since-date
                                      update-fleet-delivery!
+                                     update-fleet-delivery-field!
                                      approve-fleet-deliveries!
                                      delete-fleet-deliveries!
                                      download-fleet-deliveries]]
@@ -228,7 +229,10 @@
    {:uri "/fleet-deliveries-since-date"
     :method "POST"
     :permissions ["view-fleet"]}
-   {:uri "/fleet-delivery"
+   ;; {:uri "/fleet-delivery"
+   ;;  :method "PUT"
+   ;;  :permissions ["edit-fleet"]}
+   {:uri "/update-fleet-delivery-field"
     :method "PUT"
     :permissions ["edit-fleet"]}
    {:uri "/approve-fleet-deliveries"
@@ -587,10 +591,16 @@
                                         (:from-date b)
                                         (:to-date b)))))
   ;; edit an existing delivery
-  (PUT "/fleet-delivery" {body :body}
+  ;; (PUT "/fleet-delivery" {body :body}
+  ;;      (let [b (keywordize-keys body)]
+  ;;        (response
+  ;;         (update-fleet-delivery! (conn) b))))
+  (PUT "/update-fleet-delivery-field" {body :body}
        (let [b (keywordize-keys body)]
-         (response
-          (update-fleet-delivery! (conn) b))))
+         (response (update-fleet-delivery-field! (conn)
+                                                 (:fleet-delivery-id b)
+                                                 (:field-name b)
+                                                 (:value b)))))
   (PUT "/approve-fleet-deliveries" {body :body}
        (let [b (keywordize-keys body)]
          (response (approve-fleet-deliveries! (conn) (:fleet-delivery-ids b)))))

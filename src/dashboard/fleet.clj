@@ -15,14 +15,10 @@
             [clojure.algo.generic.functor :refer [fmap]]
             [clojure.edn :as edn]
             [clojure.data.csv :as csv]
-            
             [clojure.java.io :as io]
             [ring.util.io :as ring-io]
-            
             [clojure.string :as s]
             [clojure.walk :refer [stringify-keys]]))
-
-
 
 (defn fleet-deliveries-since-date
   "Get all fleet deliveries since date. A blank date will return all orders.
@@ -81,6 +77,26 @@
       update-result)
     {:success false
      :validation (b/validate delivery delivery-validations)}))
+
+(defn update-fleet-delivery-field!
+  [db-conn id field-name value]
+  (if (sql/with-connection db-conn
+        (sql/do-prepared
+         (str "UPDATE fleet_deliveries SET "
+              (mysql-escape-str field-name)
+              " = \""
+              (mysql-escape-str value)
+              "\""
+              (cond 
+                (in? ["gallons" "gas_price" "service_fee"] field-name)
+                (str ", total_price = GREATEST(0, CEIL((gas_price * gallons) + service_fee))")
+                
+                :else "")
+              " WHERE id = \""
+              (mysql-escape-str id)
+              "\"")))
+    {:success true}
+    {:success false}))
 
 (defn approve-fleet-deliveries!
   [db-conn ids]
@@ -177,5 +193,4 @@
                                       (cents->dollars-str (:total_price o))]))
                               results))))
          (.flush writer))))))
-
 
