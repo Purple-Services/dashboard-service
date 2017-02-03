@@ -19,8 +19,7 @@
             [clj-time.periodic :as periodic]
             [clj-time.coerce :as time-coerce]
             [clj-time.format :as time-format]
-            [dk.ative.docjure.spreadsheet :as spreadsheet]
-            ))
+            [dk.ative.docjure.spreadsheet :as spreadsheet]))
 
 (def count-filter (comp count filter))
 

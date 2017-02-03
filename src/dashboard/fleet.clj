@@ -42,7 +42,7 @@
                                 "fleet_deliveries.service_fee as `service_fee`, "
                                 "fleet_deliveries.total_price as `total_price`, "
                                 "fleet_deliveries.gas_type as `Octane`, "
-                                "if(fleet_deliveries.is_top_tier, 'Yes', 'No') as `is_top_tier`, "
+                                "fleet_deliveries.is_top_tier as `is_top_tier`, "
                                 "fleet_deliveries.approved as `approved`, "
                                 "fleet_deliveries.deleted as `deleted` "
                                 "FROM `fleet_deliveries` "
@@ -80,23 +80,41 @@
 
 (defn update-fleet-delivery-field!
   [db-conn id field-name value]
-  (if (sql/with-connection db-conn
-        (sql/do-prepared
-         (str "UPDATE fleet_deliveries SET "
-              (mysql-escape-str field-name)
-              " = \""
-              (mysql-escape-str value)
-              "\""
-              (cond 
-                (in? ["gallons" "gas_price" "service_fee"] field-name)
-                (str ", total_price = GREATEST(0, CEIL((gas_price * gallons) + service_fee))")
-                
-                :else "")
-              " WHERE id = \""
-              (mysql-escape-str id)
-              "\"")))
-    {:success true}
-    {:success false}))
+  (if-let [input-errors
+           (first
+            (b/validate
+             {(keyword field-name) (cond
+                                     (in? ["gallons"] field-name)
+                                     (try (Double/parseDouble (str value))
+                                          (catch Exception e 9999999))
+
+                                     (in? ["gas_price" "service_fee"] field-name)
+                                     (try (Integer. (str value))
+                                          (catch Exception e 9999999))
+
+                                     :else value)}
+             :gallons [[v/in-range [0.0000001 999999]]]
+             :gas_price [v/integer [v/in-range [0 999999]]]
+             :service_fee [v/integer [v/in-range [0 999999]]]))]
+    {:success false
+     :message (str (s/join ". " (flatten (vals input-errors))) ".")}
+    (if (sql/with-connection db-conn
+          (sql/do-prepared
+           (str "UPDATE fleet_deliveries SET "
+                (mysql-escape-str field-name)
+                " = \""
+                (mysql-escape-str value)
+                "\""
+                (cond 
+                  (in? ["gallons" "gas_price" "service_fee"] field-name)
+                  (str ", total_price = GREATEST(0, CEIL((gas_price * gallons) + service_fee))")
+                  
+                  :else "")
+                " WHERE id = \""
+                (mysql-escape-str id)
+                "\"")))
+      {:success true}
+      {:success false})))
 
 (defn approve-fleet-deliveries!
   [db-conn ids]
