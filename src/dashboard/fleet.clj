@@ -6,6 +6,7 @@
             [common.users :as users]
             [common.util :refer [in? map->java-hash-map split-on-comma cents->dollars-str]]
             [common.zones :refer [get-zip-def order->zones]]
+            [common.vin :refer [get-info-batch]]
             [common.orders :as orders]
             [dashboard.db :as db]
             [dashboard.zones :refer [get-all-zones-from-db]]
@@ -78,6 +79,11 @@
     {:success false
      :validation (b/validate delivery delivery-validations)}))
 
+(defn get-by-index
+  "Get an el from coll whose k is equal to v. Returns nil if el doesn't exist"
+  [coll k v]
+  (first (filter #(= (k %) v) coll)))
+
 (defn update-fleet-delivery-field!
   [db-conn id field-name value]
   (if-let [input-errors
@@ -102,12 +108,31 @@
           (sql/do-prepared
            (str "UPDATE fleet_deliveries SET "
                 (mysql-escape-str field-name)
-                " = \""
-                (mysql-escape-str value)
-                "\""
+                " = "
+                (case field-name
+                  "is_top_tier" value
+                  (str "\"" (mysql-escape-str value) "\""))
                 (cond 
                   (in? ["gallons" "gas_price" "service_fee"] field-name)
                   (str ", total_price = GREATEST(0, CEIL((gas_price * gallons) + service_fee))")
+
+                  (= "vin" field-name)
+                  (let [vin (s/upper-case value)
+                        vin-info (get-by-index (->> [vin]
+                                                    distinct
+                                                    (into [])
+                                                    get-info-batch
+                                                    :resp)
+                                               :vin
+                                               vin)]
+                    (when vin-info
+                      (str ", year = \""
+                           (mysql-escape-str (:year vin-info))
+                           "\", make = \""
+                           (mysql-escape-str (:make vin-info))
+                           "\", model = \""
+                           (mysql-escape-str (:model vin-info))
+                           "\"")))
                   
                   :else "")
                 " WHERE id = \""
