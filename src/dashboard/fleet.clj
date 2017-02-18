@@ -4,7 +4,7 @@
             [common.config :as config]
             [common.couriers :as couriers]
             [common.users :as users]
-            [common.util :refer [in? map->java-hash-map split-on-comma cents->dollars-str]]
+            [common.util :refer [in? map->java-hash-map split-on-comma cents->dollars-str now-unix rand-str-alpha-num]]
             [common.zones :refer [get-zip-def order->zones]]
             [common.vin :refer [get-info-batch]]
             [common.orders :as orders]
@@ -149,6 +149,28 @@
               " WHERE id IN (\""
               (s/join "\",\"" (map mysql-escape-str ids))
               "\")")))
+    {:success true}
+    {:success false}))
+
+(defn add-blank-fleet-delivery!
+  [db-conn fleet-location-id]
+  (if (sql/with-connection db-conn
+        (sql/do-prepared
+         (str "INSERT INTO fleet_deliveries "
+              "(id, courier_id, fleet_location_id, gallons, gas_type, "
+              "is_top_tier, gas_price, service_fee, total_price, "
+              "timestamp_recorded) VALUES "
+              "('" (rand-str-alpha-num 20) "', "
+              "'', "
+              "'" (mysql-escape-str fleet-location-id) "', "
+              "0, "
+              "'87', "
+              "1, "
+              "0, "
+              "0, "
+              "0, "
+              (now-unix)
+              ")")))
     {:success true}
     {:success false}))
 

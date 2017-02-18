@@ -42,6 +42,7 @@
                                      update-fleet-delivery!
                                      update-fleet-delivery-field!
                                      approve-fleet-deliveries!
+                                     add-blank-fleet-delivery!
                                      delete-fleet-deliveries!
                                      download-fleet-deliveries]]
             [dashboard.pages :as pages]
@@ -238,6 +239,9 @@
    {:uri "/approve-fleet-deliveries"
     :method "PUT"
     :permissions ["edit-fleet"]}
+   {:uri "/add-blank-fleet-delivery"
+    :method "PUT"
+    :permissions ["edit-fleet"]}
    {:uri "/delete-fleet-deliveries"
     :method "DELETE"
     :permissions ["edit-fleet"]}
@@ -246,6 +250,9 @@
     :permissions ["view-fleet"]}
    ;;!! analytics
    {:uri "/total-orders-customer"
+    :method "GET"
+    :permissions ["download-stats"]}
+   {:uri "/analytics/b2b-gallons"
     :method "GET"
     :permissions ["download-stats"]}
    {:uri "/status-file/:filename"
@@ -604,6 +611,9 @@
   (PUT "/approve-fleet-deliveries" {body :body}
        (let [b (keywordize-keys body)]
          (response (approve-fleet-deliveries! (conn) (:fleet-delivery-ids b)))))
+  (PUT "/add-blank-fleet-delivery" {body :body}
+       (let [b (keywordize-keys body)]
+         (response (add-blank-fleet-delivery! (conn) (:fleet-location-id b)))))
   (DELETE "/delete-fleet-deliveries" {body :body}
           (let [b (keywordize-keys body)]
             (response (delete-fleet-deliveries! (conn) (:fleet-delivery-ids b)))))
@@ -632,6 +642,36 @@
                      (analytics/totals-query
                       {:select-statement
                        "COUNT(DISTINCT id) as `orders`"
+                       :from-date from-date
+                       :to-date to-date
+                       :timezone timezone
+                       :timeformat (analytics/timeframe->timeformat
+                                    timeframe)})
+                     response-type))))
+  (POST "/analytics/b2b-gallons" {body :body}
+        (response (let [b (keywordize-keys body)
+                        {:keys [timezone timeframe response-type from-date
+                                to-date]} b]
+                    (analytics/total-for-select-response
+                     (conn)
+                     (analytics/totals-query-fleet-deliveries
+                      {:select-statement
+                       "SUM(gallons) as `y`" ; where not deleted
+                       :from-date from-date
+                       :to-date to-date
+                       :timezone timezone
+                       :timeformat (analytics/timeframe->timeformat
+                                    timeframe)})
+                     response-type))))
+  (POST "/analytics/b2b-revenue" {body :body}
+        (response (let [b (keywordize-keys body)
+                        {:keys [timezone timeframe response-type from-date
+                                to-date]} b]
+                    (analytics/total-for-select-response
+                     (conn)
+                     (analytics/totals-query-fleet-deliveries
+                      {:select-statement
+                       "SUM(total_price)/100 as `y`" ; where not deleted
                        :from-date from-date
                        :to-date to-date
                        :timezone timezone
