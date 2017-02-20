@@ -21,6 +21,10 @@
             [clojure.string :as s]
             [clojure.walk :refer [stringify-keys]]))
 
+(defn all-fleet-locations
+  [db-conn]
+  (!select db-conn "fleet_locations" ["*"] {}))
+
 (defn fleet-deliveries-since-date
   "Get all fleet deliveries since date. A blank date will return all orders.
   When unix-epoch? is true, assume date is in unix epoch seconds"

@@ -44,7 +44,8 @@
                                      approve-fleet-deliveries!
                                      add-blank-fleet-delivery!
                                      delete-fleet-deliveries!
-                                     download-fleet-deliveries]]
+                                     download-fleet-deliveries
+                                     all-fleet-locations]]
             [dashboard.pages :as pages]
             [dashboard.users :refer [dash-users
                                      process-user
@@ -229,6 +230,9 @@
    ;;!! fleet
    {:uri "/fleet-deliveries-since-date"
     :method "POST"
+    :permissions ["view-fleet"]}
+   {:uri "/all-fleet-locations"
+    :method "GET"
     :permissions ["view-fleet"]}
    ;; {:uri "/fleet-delivery"
    ;;  :method "PUT"
@@ -589,6 +593,8 @@
            (orders-since-date (conn)
                               (:date b)
                               (:unix-epoch? b)))))
+  (GET "/all-fleet-locations" []
+       (response (all-fleet-locations (conn))))
   ;; given a date in the format yyyy-mm-dd, return all orders
   ;; that have occurred since then
   (POST "/fleet-deliveries-since-date" {body :body}
