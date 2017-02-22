@@ -40,6 +40,7 @@
          db-conn
          [(str "SELECT zones.id as `id`, zones.name as `name`,"
                "zones.rank as `rank`, zones.active as `active`,"
+               "zones.market_id as `market_id`, "
                "zones.color as `color`, zones.config as `config`, "
                "GROUP_CONCAT(distinct zips.zip) as `zips`, "
                "COUNT(DISTINCT zips.zip) as `zip_count` FROM `zones` "
@@ -55,6 +56,7 @@
               db-conn
               [(str "SELECT zones.id as `id`, zones.name as `name`,"
                     "zones.rank as `rank`,zones.active as `active`,"
+                    "zones.market_id as `market_id`, "
                     "zones.color as `color`, zones.config as `config`, "
                     "GROUP_CONCAT(distinct zips.zip) as `zips`, "
                     "COUNT(DISTINCT zips.zip) as `zip_count` FROM `zones` "
@@ -72,6 +74,7 @@
               db-conn
               [(str "SELECT zones.id as `id`, zones.name as `name`,"
                     "zones.rank as `rank`,zones.active as `active`,"
+                    "zones.market_id as `market_id`, "
                     "zones.color as `color`, zones.config as `config`, "
                     "GROUP_CONCAT(distinct zips.zip) as `zips`, "
                     "COUNT(DISTINCT zips.zip) as `zip_count` FROM `zones` "
