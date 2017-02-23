@@ -436,7 +436,7 @@
          select-statement " "
          "FROM fleet_deliveries "
          "WHERE "
-         "approved = 1 AND deleted != 1 "
+         "deleted != 1 "
          "AND fleet_deliveries.timestamp_created >= "
          "convert_tz('" from-date "','" timezone "','UTC') "
          "AND fleet_deliveries.timestamp_created <= "
