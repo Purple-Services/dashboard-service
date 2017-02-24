@@ -362,6 +362,7 @@
                        :message
                        "Hours have been incorrectly formatted"]]
                      (comp not nil? #(get-in % [:config :hours])))
+   ;; [:config :time-choices] #(or (nil? %) (not (empty? %)))
 
    })
 
