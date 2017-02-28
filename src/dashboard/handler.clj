@@ -602,7 +602,8 @@
          (let [b (keywordize-keys body)]
            (fleet-deliveries-since-date (conn)
                                         (:from-date b)
-                                        (:to-date b)))))
+                                        (:to-date b)
+                                        (:search-term b)))))
   ;; edit an existing delivery
   ;; (PUT "/fleet-delivery" {body :body}
   ;;      (let [b (keywordize-keys body)]

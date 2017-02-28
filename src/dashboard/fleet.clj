@@ -28,7 +28,7 @@
 (defn fleet-deliveries-since-date
   "Get all fleet deliveries since date. A blank date will return all orders.
   When unix-epoch? is true, assume date is in unix epoch seconds"
-  [db-conn from-date to-date]
+  [db-conn from-date to-date search-term]
   (if (and (not (nil? from-date))
            (not (nil? to-date)))
     (or (db/raw-sql-query db-conn
@@ -60,13 +60,18 @@
                                          (str " 00:00:00")
                                          mysql-escape-str)
                                      "', '%Y-%m-%d %H:%i:%s'), 'America/Los_Angeles', 'UTC')")
-                                " AND "
-                                " fleet_deliveries.timestamp_created <= "
+                                " AND fleet_deliveries.timestamp_created <= "
                                 (str "CONVERT_TZ(STR_TO_DATE('"
                                      (-> to-date
                                          (str " 23:59:59")
                                          mysql-escape-str)
-                                     "', '%Y-%m-%d %H:%i:%s'), 'America/Los_Angeles', 'UTC')"))])
+                                     "', '%Y-%m-%d %H:%i:%s'), 'America/Los_Angeles', 'UTC')")
+                                (when (not (s/blank? search-term))
+                                  (str " AND (vin LIKE \"%"
+                                       (mysql-escape-str search-term)
+                                       "%\" OR license_plate LIKE \"%"
+                                       (mysql-escape-str search-term)
+                                       "%\")")))])
         [])
     []))
 
