@@ -431,12 +431,23 @@
 (defn assign-to-courier-by-admin
   "Assign new-courier-id to order-id and alert the couriers of the
   order reassignment"
-  [db-conn order-id new-courier-id]
+  [db-conn order-id new-courier-id admin-id]
   (let [order (orders/get-by-id db-conn order-id)
         old-courier-id (:courier_id order)
+        admin-email (when admin-id
+                      (some->> (!select db-conn
+                                        "dashboard_users"
+                                        [:email]
+                                        {:id admin-id})
+                               first
+                               :email))
         change-order-assignment #(!update db-conn "orders"
                                           {:courier_id new-courier-id
-                                           :auto_assign_note "Manual"}
+                                           :auto_assign_note
+                                           (cond
+                                             (= (last (s/split admin-email #"@")) "purpleapp.com")
+                                             (s/capitalize (first (s/split admin-email #"@")))
+                                             :else admin-email)}
                                           {:id order-id})
         notify-new-courier #(do (users/send-push
                                  db-conn new-courier-id

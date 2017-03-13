@@ -579,12 +579,17 @@
                {:keys [order_id new-status]} b]
            (update-status-by-admin (conn) order_id new-status))))
   ;; admin assigns courier to an order
-  (POST "/assign-order" {body :body}
+  (POST "/assign-order" [:as {body :body
+                              cookies :cookies}]
         (response
-         (let [b (keywordize-keys body)]
+         (let [b (keywordize-keys body)
+               admin-id (-> (keywordize-keys cookies)
+                            :user-id
+                            :value)]
            (assign-to-courier-by-admin (conn)
                                        (:order_id b)
-                                       (:courier_id b)))))
+                                       (:courier_id b)
+                                       admin-id))))
   ;; given a date in the format yyyy-mm-dd, return all orders
   ;; that have occurred since then
   (POST "/orders-since-date"  {body :body}
