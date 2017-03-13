@@ -23,7 +23,7 @@
    :courier_id :vehicle_id :license_plate
    :target_time_start :target_time_end :coupon_code :event_log
    :paid :stripe_charge_id :special_instructions
-   :number_rating :text_rating
+   :number_rating :text_rating :auto_assign_note
    :payment_info :notes :admin_event_log :subscription_id
    :tire_pressure_check])
 
@@ -435,7 +435,8 @@
   (let [order (orders/get-by-id db-conn order-id)
         old-courier-id (:courier_id order)
         change-order-assignment #(!update db-conn "orders"
-                                          {:courier_id new-courier-id}
+                                          {:courier_id new-courier-id
+                                           :auto_assign_note "Manual"}
                                           {:id order-id})
         notify-new-courier #(do (users/send-push
                                  db-conn new-courier-id
