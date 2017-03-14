@@ -441,13 +441,13 @@
                                         {:id admin-id})
                                first
                                :email))
+        auto-assign-note (cond
+                           (= (last (s/split admin-email #"@")) "purpleapp.com")
+                           (s/capitalize (first (s/split admin-email #"@")))
+                           :else admin-email)
         change-order-assignment #(!update db-conn "orders"
                                           {:courier_id new-courier-id
-                                           :auto_assign_note
-                                           (cond
-                                             (= (last (s/split admin-email #"@")) "purpleapp.com")
-                                             (s/capitalize (first (s/split admin-email #"@")))
-                                             :else admin-email)}
+                                           :auto_assign_note auto-assign-note}
                                           {:id order-id})
         notify-new-courier #(do (users/send-push
                                  db-conn new-courier-id
@@ -466,7 +466,8 @@
       (do
         ;; because the accept fn sets the couriers busy status to true,
         ;; there is no need to further update the courier's status
-        (orders/assign db-conn order-id new-courier-id)
+        (orders/assign db-conn order-id new-courier-id
+                       :auto-assign-note auto-assign-note)
         ;; response
         {:success true
          :message (str order-id " has been assigned to " new-courier-id)})
