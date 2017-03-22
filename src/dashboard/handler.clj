@@ -22,7 +22,8 @@
             [dashboard.couriers :refer [get-by-id include-lateness
                                         update-courier!
                                         include-os-and-app-version
-                                        include-arn-endpoint]]
+                                        include-arn-endpoint
+                                        download-courier-orders]]
             [dashboard.login :as login]
             [dashboard.orders :refer [include-eta
                                       include-user-name-phone-and-courier
@@ -67,6 +68,7 @@
             [ring.middleware.ssl :refer [wrap-ssl-redirect]]
             [dk.ative.docjure.spreadsheet :as spreadsheet]
             [cemerick.url :refer [url-decode]]
+            [cheshire.core :refer [parse-string]]
             [clojure.edn :as edn]))
 
 (defn wrap-page [resp]
@@ -149,6 +151,9 @@
     :method "PUT"
     :permissions ["edit-couriers"]}
    {:uri "/couriers"
+    :method "POST"
+    :permissions ["view-couriers"]}
+   {:uri "/download-courier-orders"
     :method "POST"
     :permissions ["view-couriers"]}
    ;;!! users
@@ -394,6 +399,26 @@
                            (include-lateness (conn))
                            (include-os-and-app-version (conn))
                            (include-arn-endpoint (conn)))})))
+  (POST "/download-courier-orders" req
+        (let [{id :id
+               name :name} (-> req
+                               ring.util.request/body-string
+                               url-decode
+                               (subs 8)
+                               (parse-string true))]
+          (-> (response (download-courier-orders (conn) id))
+              (header "Content-Type"
+                      (str "application/vnd.openxmlformats-officedocument."
+                           "spreadsheetml.sheet"
+                           " name=\""
+                           name
+                           ".csv"
+                           "\""))
+              (header "Content-Disposition"
+                      (str "attachment; filename=\""
+                           name
+                           ".csv"
+                           "\"")))))
   ;;!! users
   ;; get a user by id
   (GET "/user/:id" [id]

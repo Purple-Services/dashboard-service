@@ -16,12 +16,14 @@
 
 body {
     background-color: #fff;
+    color: #444;
+    font-family: Helvetica;
     margin-top: 55px !important;
 }
 
 .nav-bar-color {
-    background-color: #4E4084;
-    border-color: #4E4084;
+    background-color: #453874;
+    border-color: #453874;
 }
 
 .page-wrapper-color {
@@ -106,8 +108,8 @@ tbody > tr.editing > td {
 
 
 .purple-logo {
-    width: 4.5em;
-    margin-top: -8px;
+    width: 76px;
+    margin-top: -9px;
 }
 
 .fake-link {
