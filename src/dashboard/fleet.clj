@@ -121,7 +121,7 @@
                 " = "
                 (case field-name
                   "is_top_tier" value
-                  (str "\"" (mysql-escape-str value) "\""))
+                  (str "\"" (mysql-escape-str (str value)) "\""))
                 (cond 
                   (in? ["gallons" "gas_price" "service_fee"] field-name)
                   (str ", total_price = GREATEST(0, CEIL((gas_price * gallons) + service_fee))")
@@ -143,6 +143,9 @@
                            "\", model = \""
                            (mysql-escape-str (:model vin-info))
                            "\"")))
+
+                  (= "timestamp_recorded" field-name)
+                  ", was_timestamp_manually_changed = 1"
                   
                   :else "")
                 " WHERE id = \""
