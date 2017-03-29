@@ -39,6 +39,7 @@
                                 "fleet_deliveries.id as `id`, "
                                 "fleet_deliveries.fleet_location_id as `fleet_location_id`, "
                                 "fleet_deliveries.timestamp_created as `timestamp_created`, "
+                                "fleet_deliveries.timestamp_recorded as `timestamp_recorded`, "
                                 "fleet_deliveries.vin as `vin`, "
                                 "fleet_deliveries.license_plate as `license_plate`, "
                                 "fleet_deliveries.gallons as `gallons`, "
@@ -54,18 +55,18 @@
                                 "LEFT JOIN fleet_locations ON fleet_locations.id = fleet_deliveries.fleet_location_id "
                                 "LEFT JOIN accounts ON accounts.id = fleet_locations.account_id "
                                 "LEFT JOIN users ON fleet_deliveries.courier_id = users.id "
-                                "WHERE fleet_deliveries.timestamp_created >= "
-                                (str "CONVERT_TZ(STR_TO_DATE('"
+                                "WHERE fleet_deliveries.timestamp_recorded >= "
+                                (str "UNIX_TIMESTAMP(CONVERT_TZ(STR_TO_DATE('"
                                      (-> from-date
                                          (str " 00:00:00")
                                          mysql-escape-str)
-                                     "', '%Y-%m-%d %H:%i:%s'), 'America/Los_Angeles', 'UTC')")
-                                " AND fleet_deliveries.timestamp_created <= "
-                                (str "CONVERT_TZ(STR_TO_DATE('"
+                                     "', '%Y-%m-%d %H:%i:%s'), 'America/Los_Angeles', 'UTC'))")
+                                " AND fleet_deliveries.timestamp_recorded <= "
+                                (str "UNIX_TIMESTAMP(CONVERT_TZ(STR_TO_DATE('"
                                      (-> to-date
                                          (str " 23:59:59")
                                          mysql-escape-str)
-                                     "', '%Y-%m-%d %H:%i:%s'), 'America/Los_Angeles', 'UTC')")
+                                     "', '%Y-%m-%d %H:%i:%s'), 'America/Los_Angeles', 'UTC'))")
                                 (when (not (s/blank? search-term))
                                   (str " AND (vin LIKE \"%"
                                        (mysql-escape-str search-term)
