@@ -208,8 +208,8 @@
                        "users.name as `courier_name`, "
                        "fleet_deliveries.id as `id`, "
                        "fleet_deliveries.fleet_location_id as `fleet_location_id`, "
-                       "date_format(convert_tz(fleet_deliveries.timestamp_created, \"UTC\", "
-                       "\"America/Los_Angeles\"),\"%Y-%m-%d %H:%i:%S\") as `timestamp_created`, "
+                       "date_format(convert_tz(fleet_deliveries.timestamp_recorded, \"UTC\", "
+                       "\"America/Los_Angeles\"),\"%Y-%m-%d %H:%i:%S\") as `timestamp_recorded`, "
                        "fleet_deliveries.year as `year`, "
                        "fleet_deliveries.make as `make`, "
                        "fleet_deliveries.model as `model`, "
@@ -254,7 +254,7 @@
                            "Service Fee"
                            "Total Price"]]
                          (map (fn [o]
-                                (vec [(:timestamp_created o)
+                                (vec [(:timestamp_recorded o)
                                       (:id o)
                                       (:fleet_location_name o)
                                       (:courier_name o)
