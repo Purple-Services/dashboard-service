@@ -47,6 +47,11 @@
                                      delete-fleet-deliveries!
                                      download-fleet-deliveries
                                      all-fleet-locations]]
+            [dashboard.gas-purchases :refer [gas-purchases-since-date
+                                             update-gas-purchase-field!
+                                             add-blank-gas-purchase!
+                                             delete-gas-purchases!
+                                             download-gas-purchases]]
             [dashboard.pages :as pages]
             [dashboard.users :refer [dash-users
                                      process-user
@@ -119,7 +124,8 @@
 ;; #{"view-dash","view-couriers","edit-couriers","view-users","edit-users,
 ;;   "send-push","view-coupons","edit-coupons","create-coupons","view-zones",
 ;;   "edit-zones", "view-orders","edit-orders","download-stats",
-;;   "convert-to-courier","view-fleet","edit-fleet"}
+;;   "convert-to-courier","view-fleet","edit-fleet","view-gas-purchases",
+;;   "edit-gas-purchases"}
 ;;
 (def dashboard-uri-permissions
   [
@@ -257,6 +263,22 @@
    {:uri "/download-fleet-deliveries"
     :method "POST"
     :permissions ["view-fleet"]}
+   ;;!! gas purchases
+   {:uri "/gas-purchases-since-date"
+    :method "POST"
+    :permissions ["view-gas-purchases"]}
+   {:uri "/update-gas-purchase-field"
+    :method "PUT"
+    :permissions ["edit-gas-purchases"]}
+   {:uri "/add-blank-gas-purchase"
+    :method "PUT"
+    :permissions ["edit-gas-purchase"]}
+   {:uri "/delete-gas-purchases"
+    :method "DELETE"
+    :permissions ["edit-gas-purchases"]}
+   {:uri "/download-gas-purchases"
+    :method "POST"
+    :permissions ["gas-purchases"]}
    ;;!! analytics
    {:uri "/total-orders-customer"
     :method "GET"
@@ -669,6 +691,41 @@
             (header "Content-Disposition"
                     (str "attachment; filename=\""
                          "fleet-deliveries.csv" "\""))))
+  ;;!! gas purchases
+  (POST "/gas-purchases-since-date" {body :body}
+        (response
+         (let [b (keywordize-keys body)]
+           (gas-purchases-since-date (conn)
+                                     (:from-date b)
+                                     (:to-date b)
+                                     (:search-term b)))))
+  (PUT "/update-gas-purchase-field" {body :body}
+       (let [b (keywordize-keys body)]
+         (response (update-gas-purchase-field! (conn)
+                                               (:gas-purchase-id b)
+                                               (:field-name b)
+                                               (:value b)))))
+  (PUT "/add-blank-gas-purchase" {body :body}
+       (let [b (keywordize-keys body)]
+         (response (add-blank-gas-purchase! (conn) (:courier-id b)))))
+  (DELETE "/delete-gas-purchase" {body :body}
+          (let [b (keywordize-keys body)]
+            (response (delete-gas-purchases! (conn) (:gas-purchase-ids b)))))
+  (POST "/download-gas-purchases" req
+        (-> (response (download-gas-purchases (conn)
+                                              (-> req
+                                                  ring.util.request/body-string
+                                                  url-decode
+                                                  (subs 19)
+                                                  edn/read-string)))
+            (header "Content-Type"
+                    (str "application/vnd.openxmlformats-officedocument."
+                         "spreadsheetml.sheet"
+                         " name=\""
+                         "gas-purchases.csv" "\""))
+            (header "Content-Disposition"
+                    (str "attachment; filename=\""
+                         "gas-purchases.csv" "\""))))
   ;;!! analytics
   (POST "/total-orders-customer" {body :body}
         (response (let [b (keywordize-keys body)

@@ -431,20 +431,20 @@
   (let [from-date (str from-date " 00:00:00")
         to-date   (str to-date " 23:59:59")]
     (str "SELECT "
-         "date_format(convert_tz(fleet_deliveries.timestamp_created,'UTC',"
+         "date_format(convert_tz(FROM_UNIXTIME(fleet_deliveries.timestamp_recorded),'UTC',"
          "'" timezone "'),'" timeformat "') AS 'date', "
          select-statement " "
          "FROM fleet_deliveries "
          "WHERE "
          "deleted != 1 "
-         "AND fleet_deliveries.timestamp_created >= "
-         "convert_tz('" from-date "','" timezone "','UTC') "
-         "AND fleet_deliveries.timestamp_created <= "
-         "convert_tz('" to-date "','" timezone "','UTC') "
+         "AND fleet_deliveries.timestamp_recorded >= "
+         "UNIX_TIMESTAMP(convert_tz('" from-date "','" timezone "','UTC')) "
+         "AND fleet_deliveries.timestamp_recorded <= "
+         "UNIX_TIMESTAMP(convert_tz('" to-date "','" timezone "','UTC')) "
          (when where-clause
            (str where-clause " "))
          "GROUP BY "
-         "date_format(convert_tz(fleet_deliveries.timestamp_created,'UTC',"
+         "date_format(convert_tz(FROM_UNIXTIME(fleet_deliveries.timestamp_recorded),'UTC',"
          "'" timezone "'),'" timeformat "');")))
 
 (defn per-courier-query
@@ -783,7 +783,7 @@
          "fleet_locations.name as 'location-name', "
          "users.name as `Courier`, "
          "fleet_deliveries.id as `delivery-id`, "
-         "date_format(convert_tz(fleet_deliveries.timestamp_created,'UTC',"
+         "date_format(convert_tz(FROM_UNIXTIME(fleet_deliveries.timestamp_recorded),'UTC',"
          "'" timezone "'"
          "),'%Y-%m-%d %H:%i:%S') as `timestamp`, "
          "fleet_deliveries.vin as `vin`, "
@@ -796,12 +796,11 @@
          "LEFT JOIN fleet_locations ON fleet_locations.id = fleet_deliveries.fleet_location_id "
          "LEFT JOIN accounts ON accounts.id = fleet_locations.account_id "
          "LEFT JOIN users ON fleet_deliveries.courier_id = users.id "
-         "WHERE fleet_deliveries.timestamp_created >= "
-         "convert_tz('" from-date "','" timezone "','UTC') "
-         "AND fleet_deliveries.timestamp_created <= "
-         "convert_tz('" to-date "','" timezone "','UTC') "
-         "ORDER BY accounts.name ASC, fleet_deliveries.timestamp_created ASC;"
-         )))
+         "WHERE fleet_deliveries.timestamp_recorded >= "
+         "UNIX_TIMESTAMP(convert_tz('" from-date "','" timezone "','UTC')) "
+         "AND fleet_deliveries.timestamp_recorded <= "
+         "UNIX_TIMESTAMP(convert_tz('" to-date "','" timezone "','UTC')) "
+         "ORDER BY accounts.name ASC, fleet_deliveries.timestamp_recorded ASC;")))
 
 (defn generate-fleet-accounts-xlsx
   [{:keys [from-date to-date timezone db-conn]}]
