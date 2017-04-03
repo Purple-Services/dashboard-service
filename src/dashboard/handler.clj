@@ -278,7 +278,7 @@
     :permissions ["edit-gas-purchases"]}
    {:uri "/download-gas-purchases"
     :method "POST"
-    :permissions ["gas-purchases"]}
+    :permissions ["view-gas-purchases"]}
    ;;!! analytics
    {:uri "/total-orders-customer"
     :method "GET"
@@ -708,7 +708,7 @@
   (PUT "/add-blank-gas-purchase" {body :body}
        (let [b (keywordize-keys body)]
          (response (add-blank-gas-purchase! (conn) (:courier-id b)))))
-  (DELETE "/delete-gas-purchase" {body :body}
+  (DELETE "/delete-gas-purchases" {body :body}
           (let [b (keywordize-keys body)]
             (response (delete-gas-purchases! (conn) (:gas-purchase-ids b)))))
   (POST "/download-gas-purchases" req
@@ -716,7 +716,7 @@
                                               (-> req
                                                   ring.util.request/body-string
                                                   url-decode
-                                                  (subs 19)
+                                                  (subs 17)
                                                   edn/read-string)))
             (header "Content-Type"
                     (str "application/vnd.openxmlformats-officedocument."

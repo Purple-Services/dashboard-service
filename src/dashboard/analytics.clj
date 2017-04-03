@@ -506,23 +506,23 @@
         to-date   (str to-date " 23:59:59")]
     (str "SELECT (SELECT `users`.`name` AS `name` FROM `users` WHERE "
          "(`users`.`id` = `fleet_deliveries`.`courier_id`)) AS `name`, "
-         "date_format(convert_tz(fleet_deliveries.timestamp_created,'UTC',"
+         "date_format(convert_tz(FROM_UNIXTIME(fleet_deliveries.timestamp_recorded),'UTC',"
          "'" timezone "'),'" timeformat "') AS 'date', "
          select-statement " "
          "FROM `fleet_deliveries` "
          "WHERE "
-         "fleet_deliveries.timestamp_created >= "
-         "convert_tz('" from-date "','" timezone "','UTC') "
-         "AND fleet_deliveries.timestamp_created <= "
-         "convert_tz('" to-date "','" timezone "','UTC') "
+         "fleet_deliveries.timestamp_recorded >= "
+         "UNIX_TIMESTAMP(convert_tz('" from-date "','" timezone "','UTC')) "
+         "AND fleet_deliveries.timestamp_recorded <= "
+         "UNIX_TIMESTAMP(convert_tz('" to-date "','" timezone "','UTC')) "
          (when where-clause
            (str where-clause " "))
          "GROUP BY "
-         "date_format(convert_tz(fleet_deliveries.timestamp_created,'UTC',"
-         "'" timezone "'),'" timeformat "') "
+         "date_format(convert_tz(FROM_UNIXTIME(fleet_deliveries.timestamp_recorded,'UTC',"
+         "'" timezone "')),'" timeformat "') "
          "ORDER BY "
-         "date_format(convert_tz(fleet_deliveries.timestamp_created,'UTC',"
-         "'" timezone "'),'" timeformat "') asc;")))
+         "date_format(convert_tz(FROM_UNIXTIME(fleet_deliveries.timestamp_recorded,'UTC',"
+         "'" timezone "')),'" timeformat "') asc;")))
 
 (defn total-for-select-response
   "Provide a response from db-conn for sql generated using totals-query.

@@ -208,7 +208,7 @@
                        "users.name as `courier_name`, "
                        "fleet_deliveries.id as `id`, "
                        "fleet_deliveries.fleet_location_id as `fleet_location_id`, "
-                       "date_format(convert_tz(fleet_deliveries.timestamp_recorded, \"UTC\", "
+                       "date_format(convert_tz(FROM_UNIXTIME(fleet_deliveries.timestamp_recorded), \"UTC\", "
                        "\"America/Los_Angeles\"),\"%Y-%m-%d %H:%i:%S\") as `timestamp_recorded`, "
                        "fleet_deliveries.year as `year`, "
                        "fleet_deliveries.make as `make`, "
@@ -231,7 +231,7 @@
                        "WHERE fleet_deliveries.id IN (\""
                        (s/join "\",\"" (map mysql-escape-str ids))
                        "\") "
-                       "ORDER BY timestamp_created DESC")])]
+                       "ORDER BY fleet_deliveries.timestamp_recorded DESC")])]
     (ring-io/piped-input-stream
      (fn [ostream]
        (let [writer (io/writer ostream)]
