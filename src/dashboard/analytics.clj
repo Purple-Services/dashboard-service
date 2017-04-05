@@ -518,11 +518,11 @@
          (when where-clause
            (str where-clause " "))
          "GROUP BY "
-         "date_format(convert_tz(FROM_UNIXTIME(fleet_deliveries.timestamp_recorded,'UTC',"
-         "'" timezone "')),'" timeformat "') "
+         "date_format(convert_tz(FROM_UNIXTIME(fleet_deliveries.timestamp_recorded),'UTC',"
+         "'" timezone "'),'" timeformat "') "
          "ORDER BY "
-         "date_format(convert_tz(FROM_UNIXTIME(fleet_deliveries.timestamp_recorded,'UTC',"
-         "'" timezone "')),'" timeformat "') asc;")))
+         "date_format(convert_tz(FROM_UNIXTIME(fleet_deliveries.timestamp_recorded),'UTC',"
+         "'" timezone "'),'" timeformat "') asc;")))
 
 (defn total-for-select-response
   "Provide a response from db-conn for sql generated using totals-query.
