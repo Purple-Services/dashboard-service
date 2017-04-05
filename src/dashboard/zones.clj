@@ -391,6 +391,7 @@
   bouncer error map."
   [db-conn zone admin-id]
   (let [{:keys [name rank active zips config]} zone
+        config (if (s/blank? config) "{}" config)
         new-zone (assoc zone :config (edn/read-string config))]
     (if (b/valid? new-zone new-zone-validations)
       (let [zips-vec (zip-str->zip-vec zips)
