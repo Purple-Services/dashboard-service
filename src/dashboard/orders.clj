@@ -14,7 +14,8 @@
             [common.zones :refer [get-zip-def order->zones]]
             [common.orders :as orders]
             [dashboard.db :as db]
-            [dashboard.zones :refer [get-all-zones-from-db]]))
+            [dashboard.zones :refer [get-all-zones-from-db]]
+            [dashboard.utils :refer [append-to-admin-event-log]]))
 
 (def orders-select
   [:id :lat :lng :status :gallons :gas_type
@@ -172,13 +173,6 @@
 
          orders)))
 
-(defn admin-event-log-str->edn
-  "Convert admin_event_log of orders from a string to edn"
-  [orders]
-  (map #(assoc %
-               :admin_event_log (edn/read-string (:admin_event_log %)))
-       orders))
-
 (defn include-first-order
   "Add the boolean first_order? to all orders indicating whether or not this is
   the first order for the user"
@@ -207,24 +201,12 @@
   {:notes [[v/string :message "Note must be a string!"]
            [v/string :message "Cancellation reason must be a string!"]]})
 
-(defn add-event-to-admin-event-log
-  "Add an event to admin_event_log of order and return a string of the new event
-  log"
-  [order event]
-  (let [admin-event-log  (if-let [log (edn/read-string
-                                       (:admin_event_log order))]
-                           log
-                           [])]
-    (str (merge admin-event-log event))))
-
 (defn add-cancel-reason
   "Given current-order from the database, new-cancel-reason and admin-id, add
   the new-cancel-reason to the admin_event_log of current-order."
   [current-order new-cancel-reason admin-id]
-  (let [admin-event-log  (if-let [log (edn/read-string
-                                       (:admin_event_log current-order))]
-                           log
-                           [])
+  (let [admin-event-log  (or (edn/read-string (:admin_event_log current-order))
+                             [])
         current-cancel-reason (->> admin-event-log
                                    (filter #(= (:action %) "cancel-order"))
                                    (sort-by :timestamp)
@@ -236,15 +218,10 @@
           (= new-cancel-reason current-cancel-reason)
           current-order
           (not= new-cancel-reason current-cancel-reason)
-          (assoc current-order
-                 :admin_event_log
-                 (add-event-to-admin-event-log
-                  current-order
-                  {:timestamp (quot
-                               (System/currentTimeMillis) 1000)
-                   :admin_id admin-id
-                   :action "cancel-order"
-                   :comment new-cancel-reason})))))
+          (append-to-admin-event-log current-order
+                                     :admin-id admin-id
+                                     :action "cancel-order"
+                                     :comment new-cancel-reason))))
 
 (defn add-notes
   "Given current-order and new-notes, add them to the current-order"
@@ -278,14 +255,14 @@
      :validation (b/validate order order-validations)}))
 
 (defn process-orders
-  "Process orders, with data from db-conn, to send to dashboard client "
+  "Process orders, with data from db-conn, to send to dashboard client."
   [orders db-conn]
   (->> orders
        (include-user-name-phone-and-courier db-conn)
        (include-vehicle db-conn)
        (include-zone-info db-conn)
        (include-was-late)
-       (admin-event-log-str->edn)
+       (map #(update % :admin_event_log edn/read-string))
        (include-first-order db-conn)))
 
 (defn cancel-order
@@ -301,21 +278,20 @@
                          :override-cancellable-statuses
                          (conj config/cancellable-statuses "servicing"))
         current-order  (orders/get-by-id db-conn order-id)
-        event          {:timestamp (quot (System/currentTimeMillis) 1000)
-                        :admin_id admin-id
-                        :action "cancel-order"
-                        :comment (or cancel-reason "None")}
-        admin-event-log (add-event-to-admin-event-log current-order event)]
+        admin-event-log (:admin_event_log
+                         (append-to-admin-event-log current-order
+                                                    :admin-id admin-id
+                                                    :action "cancel-order"
+                                                    :comment (or cancel-reason "None")))]
     (cond (:success cancel-response)
-          (do
-            (!update db-conn
-                     "orders"
-                     {:admin_event_log admin-event-log}
-                     {:id order-id})
-            {:success true
-             :order (first (process-orders
-                            [(orders/get-by-id db-conn order-id)]
-                            db-conn))})
+          (do (!update db-conn
+                       "orders"
+                       {:admin_event_log admin-event-log}
+                       {:id order-id})
+              {:success true
+               :order (first (process-orders
+                              [(orders/get-by-id db-conn order-id)]
+                              db-conn))})
           :else cancel-response)))
 
 (defn orders-since-date

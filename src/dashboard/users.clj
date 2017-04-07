@@ -7,7 +7,8 @@
             [crypto.password.bcrypt :as bcrypt]
             [common.db :refer [mysql-escape-str !select !update !insert]]
             [common.users :refer [send-push get-user-by-id]]
-            [common.util :refer [in? sns-publish sns-client sns-client]]))
+            [common.util :refer [in? sns-publish sns-client]]
+            [dashboard.utils :refer [append-to-admin-event-log]]))
 
 (def users-select
   [:id :name :email :phone_number :os
@@ -161,9 +162,6 @@
     (let [{:keys [admin_id referral_comment referral_gallons id]} user
           db-user  (dissoc (get-user-by-id db-conn id)
                            :account_manager_id)
-          event-log (if-let [log (edn/read-string (:admin_event_log db-user))]
-                      log
-                      [])
           update-result (!update db-conn "users"
                                  {:referral_gallons referral_gallons}
                                  {:id (:id db-user)})]
@@ -171,29 +169,26 @@
         (do
           ;; update the log
           (!update db-conn "users"
-                   {:admin_event_log
-                    (str (merge
-                          event-log
-                          {:timestamp (quot (System/currentTimeMillis) 1000)
-                           :admin_id admin_id
-                           :action "adjust_referral_gallons"
-                           :previous_value (:referral_gallons db-user)
-                           :new_value referral_gallons
-                           :comment (or referral_comment "")}))}
+                   (append-to-admin-event-log
+                    {:admin_event_log (:admin_event_log db-user)}
+                    :admin-id admin_id
+                    :action "adjust_referral_gallons"
+                    :comment (or referral_comment "")
+                    :previous-value (:referral_gallons db-user)
+                    :new-value referral_gallons)
                    {:id (:id db-user)})
           (assoc update-result :id (:id db-user)))
         ;; update that there was a failure
         (do
           ;; update the log
           (!update db-conn "users"
-                   {:admin_event_log
-                    (str (merge
-                          event-log
-                          {:timestamp (quot (System/currentTimeMillis) 1000)
-                           :admin_id admin_id
-                           :action "adjust_referral_gallons"
-                           :previous_value (:referral_gallons db-user)
-                           :comment "There was a failure updating gallons"}))}
+                   (append-to-admin-event-log
+                    {:admin_event_log (:admin_event_log db-user)}
+                    :admin-id admin_id
+                    :action "adjust_referral_gallons"
+                    :comment "There was a failure updating gallons"
+                    :previous-value (:referral_gallons db-user)
+                    :new-value referral_gallons)
                    {:id (:id db-user)})
           (assoc update-result :id (:id db-user)))))
     {:success false

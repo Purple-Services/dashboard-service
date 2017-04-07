@@ -31,7 +31,6 @@
                                       include-was-late
                                       include-zone-info
                                       include-first-order
-                                      admin-event-log-str->edn
                                       orders-since-date
                                       search-orders
                                       update-order!
@@ -594,7 +593,7 @@
                    (include-zone-info db-conn)
                    (include-eta db-conn)
                    (include-was-late)
-                   (admin-event-log-str->edn)
+                   (map #(update % :admin_event_log edn/read-string))
                    (include-first-order db-conn)))))))
   ;; edit an order
   (PUT "/order" [:as {body :body
