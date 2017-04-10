@@ -39,7 +39,6 @@
                                       update-status-by-admin
                                       assign-to-courier-by-admin]]
             [dashboard.fleet :refer [fleet-deliveries-since-date
-                                     update-fleet-delivery!
                                      update-fleet-delivery-field!
                                      approve-fleet-deliveries!
                                      add-blank-fleet-delivery!
@@ -655,26 +654,29 @@
                                         (:from-date b)
                                         (:to-date b)
                                         (:search-term b)))))
-  ;; edit an existing delivery
-  ;; (PUT "/fleet-delivery" {body :body}
-  ;;      (let [b (keywordize-keys body)]
-  ;;        (response
-  ;;         (update-fleet-delivery! (conn) b))))
-  (PUT "/update-fleet-delivery-field" {body :body}
-       (let [b (keywordize-keys body)]
+  (PUT "/update-fleet-delivery-field" [:as {body :body
+                                            cookies :cookies}]
+       (let [b (keywordize-keys body)
+             admin-id (-> (keywordize-keys cookies)
+                          :user-id
+                          :value)]
          (response (update-fleet-delivery-field! (conn)
                                                  (:fleet-delivery-id b)
                                                  (:field-name b)
-                                                 (:value b)))))
+                                                 (:value b)
+                                                 :admin-id admin-id))))
   (PUT "/approve-fleet-deliveries" {body :body}
        (let [b (keywordize-keys body)]
-         (response (approve-fleet-deliveries! (conn) (:fleet-delivery-ids b)))))
+         (response (approve-fleet-deliveries! (conn)
+                                              (:fleet-delivery-ids b)))))
   (PUT "/add-blank-fleet-delivery" {body :body}
        (let [b (keywordize-keys body)]
-         (response (add-blank-fleet-delivery! (conn) (:fleet-location-id b)))))
+         (response (add-blank-fleet-delivery! (conn)
+                                              (:fleet-location-id b)))))
   (DELETE "/delete-fleet-deliveries" {body :body}
           (let [b (keywordize-keys body)]
-            (response (delete-fleet-deliveries! (conn) (:fleet-delivery-ids b)))))
+            (response (delete-fleet-deliveries! (conn)
+                                                (:fleet-delivery-ids b)))))
   (POST "/download-fleet-deliveries" req
         (-> (response (download-fleet-deliveries (conn)
                                                  (-> req

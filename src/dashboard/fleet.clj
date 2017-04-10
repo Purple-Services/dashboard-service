@@ -10,6 +10,7 @@
             [common.orders :as orders]
             [dashboard.db :as db]
             [dashboard.zones :refer [get-all-zones-from-db]]
+            [dashboard.utils :refer [db-append-to-admin-event-log]]
             [clojure.java.jdbc :as sql]
             [bouncer.core :as b]
             [bouncer.validators :as v]
@@ -76,26 +77,13 @@
         [])
     []))
 
-(def delivery-validations
-  {:gallons [v/required]})
-
-(defn update-fleet-delivery!
-  [db-conn delivery]
-  (if (b/valid? delivery delivery-validations)
-    (let [update-result (!update db-conn "fleet_deliveries"
-                                 (dissoc delivery :id)
-                                 {:id (:id delivery)})]
-      update-result)
-    {:success false
-     :validation (b/validate delivery delivery-validations)}))
-
 (defn get-by-index
   "Get an el from coll whose k is equal to v. Returns nil if el doesn't exist"
   [coll k v]
   (first (filter #(= (k %) v) coll)))
 
 (defn update-fleet-delivery-field!
-  [db-conn id field-name value]
+  [db-conn id field-name value & {:keys [admin-id]}]
   (if-let [input-errors
            (first
             (b/validate
@@ -114,43 +102,49 @@
              :service_fee [v/integer [v/in-range [0 999999]]]))]
     {:success false
      :message (str (s/join ". " (flatten (vals input-errors))) ".")}
-    (if (sql/with-connection db-conn
-          (sql/do-prepared
-           (str "UPDATE fleet_deliveries SET "
-                (mysql-escape-str field-name)
-                " = "
-                (case field-name
-                  "is_top_tier" value
-                  (str "\"" (mysql-escape-str (str value)) "\""))
-                (cond 
-                  (in? ["gallons" "gas_price" "service_fee"] field-name)
-                  (str ", total_price = GREATEST(0, CEIL((gas_price * gallons) + service_fee))")
+    (if (do (db-append-to-admin-event-log db-conn "fleet_deliveries" id
+                                          :admin-id admin-id
+                                          :action "edit-field"
+                                          :comment field-name
+                                          :new-value value
+                                          :retrieve-column-previous-value field-name)
+            (sql/with-connection db-conn
+              (sql/do-prepared
+               (str "UPDATE fleet_deliveries SET "
+                    (mysql-escape-str field-name)
+                    " = "
+                    (case field-name
+                      "is_top_tier" value
+                      (str "\"" (mysql-escape-str (str value)) "\""))
+                    (cond 
+                      (in? ["gallons" "gas_price" "service_fee"] field-name)
+                      (str ", total_price = GREATEST(0, CEIL((gas_price * gallons) + service_fee))")
 
-                  (= "vin" field-name)
-                  (let [vin (s/upper-case value)
-                        vin-info (get-by-index (->> [vin]
-                                                    distinct
-                                                    (into [])
-                                                    get-info-batch
-                                                    :resp)
-                                               :vin
-                                               vin)]
-                    (when vin-info
-                      (str ", year = \""
-                           (mysql-escape-str (:year vin-info))
-                           "\", make = \""
-                           (mysql-escape-str (:make vin-info))
-                           "\", model = \""
-                           (mysql-escape-str (:model vin-info))
-                           "\"")))
+                      (= "vin" field-name)
+                      (let [vin (s/upper-case value)
+                            vin-info (get-by-index (->> [vin]
+                                                        distinct
+                                                        (into [])
+                                                        get-info-batch
+                                                        :resp)
+                                                   :vin
+                                                   vin)]
+                        (when vin-info
+                          (str ", year = \""
+                               (mysql-escape-str (:year vin-info))
+                               "\", make = \""
+                               (mysql-escape-str (:make vin-info))
+                               "\", model = \""
+                               (mysql-escape-str (:model vin-info))
+                               "\"")))
 
-                  (= "timestamp_recorded" field-name)
-                  ", was_timestamp_manually_changed = 1"
-                  
-                  :else "")
-                " WHERE id = \""
-                (mysql-escape-str id)
-                "\"")))
+                      (= "timestamp_recorded" field-name)
+                      ", was_timestamp_manually_changed = 1"
+                      
+                      :else "")
+                    " WHERE id = \""
+                    (mysql-escape-str id)
+                    "\""))))
       {:success true}
       {:success false})))
 
