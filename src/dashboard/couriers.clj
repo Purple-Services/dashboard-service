@@ -5,7 +5,7 @@
             [clojure.edn :as edn]
             [common.couriers :refer [parse-courier-zones]]
             [common.db :refer [conn !select !update mysql-escape-str]]
-            [common.util :refer [split-on-comma get-event-time unix->full]]
+            [common.util :refer [in? split-on-comma get-event-time unix->full cents->dollars]]
             [dashboard.utils :as utils]
             [dashboard.db :as db]
             [clojure.data.csv :as csv]
@@ -187,7 +187,7 @@
                        "orders.gallons as `gallons`, "
                        "if(orders.is_top_tier, 'Yes', 'No') as `is_top_tier` "
                        "FROM `orders` "
-                       "LEFT JOIN users ON orders.courier_id = users.id "
+                       "LEFT JOIN users ON orders.user_id = users.id "
                        "WHERE orders.courier_id = \"" (mysql-escape-str courier-id) "\" "
                        "ORDER BY timestamp_created DESC")])]
     (ring-io/piped-input-stream
@@ -234,4 +234,219 @@
                                   (:gallons o)
                                   (:is_top_tier o)])))
                         results))))
+         (.flush writer))))))
+
+(defn download-courier-statistics
+  [db-conn from-date to-date]
+  (let [orders (db/raw-sql-query
+                db-conn
+                [(str "SELECT orders.id as `id`, "
+                      "orders.courier_id as `courier_id`, "
+                      "users.name as `courier_name`, "
+                      "orders.status as `status`, "
+                      "date_format(convert_tz(orders.timestamp_created, \"UTC\", "
+                      "\"America/Los_Angeles\"),\"%Y-%m-%d %H:%i:%S\") as `timestamp_created`, "
+                      "orders.event_log as `event_log`, "
+                      "orders.target_time_end as `target_time_end`, "
+                      "orders.number_rating as `number_rating`, "
+                      "orders.gas_type as `gas_type`, "
+                      "orders.gas_price as `gas_price`, "
+                      "orders.gallons as `gallons` "
+                      "FROM `orders` "
+                      "LEFT JOIN users ON orders.courier_id = users.id "
+                      "WHERE orders.target_time_start >= "
+                      (str "UNIX_TIMESTAMP(CONVERT_TZ(STR_TO_DATE('"
+                           (-> from-date
+                               (str " 00:00:00")
+                               mysql-escape-str)
+                           "', '%Y-%m-%d %H:%i:%s'), 'America/Los_Angeles', 'UTC'))")
+                      " AND orders.target_time_start <= "
+                      (str "UNIX_TIMESTAMP(CONVERT_TZ(STR_TO_DATE('"
+                           (-> to-date
+                               (str " 23:59:59")
+                               mysql-escape-str)
+                           "', '%Y-%m-%d %H:%i:%s'), 'America/Los_Angeles', 'UTC'))")
+                      "AND orders.status = 'complete' "
+                      "AND orders.courier_id != '' "
+                      "ORDER BY orders.timestamp_created DESC")])
+        fleet-deliveries (db/raw-sql-query
+                          db-conn
+                          [(str "SELECT fleet_deliveries.id as `id`, "
+                                "fleet_deliveries.courier_id as `courier_id`, "
+                                "fleet_deliveries.gallons as `gallons`, "
+                                "fleet_deliveries.total_price as `total_price`, "
+                                "fleet_deliveries.gas_price as `gas_price`, "
+                                "fleet_deliveries.gas_type as `gas_type`, "
+                                "fleet_deliveries.timestamp_recorded as `timestamp_recorded` "
+                                "FROM `fleet_deliveries` "
+                                "WHERE fleet_deliveries.timestamp_recorded >= "
+                                (str "UNIX_TIMESTAMP(CONVERT_TZ(STR_TO_DATE('"
+                                     (-> from-date
+                                         (str " 00:00:00")
+                                         mysql-escape-str)
+                                     "', '%Y-%m-%d %H:%i:%s'), 'America/Los_Angeles', 'UTC'))")
+                                " AND fleet_deliveries.timestamp_recorded <= "
+                                (str "UNIX_TIMESTAMP(CONVERT_TZ(STR_TO_DATE('"
+                                     (-> to-date
+                                         (str " 23:59:59")
+                                         mysql-escape-str)
+                                     "', '%Y-%m-%d %H:%i:%s'), 'America/Los_Angeles', 'UTC'))")
+                                "AND fleet_deliveries.deleted != 1 "
+                                "ORDER BY fleet_deliveries.timestamp_recorded DESC")])
+        gas-purchases (db/raw-sql-query
+                       db-conn
+                       [(str "SELECT gas_purchases.id as `id`, "
+                             "gas_purchases.courier_id as `courier_id`, "
+                             "gas_purchases.gallons as `gallons`, "
+                             "gas_purchases.total_price as `total_price`, "
+                             "gas_purchases.gas_type as `gas_type`, "
+                             "gas_purchases.timestamp_recorded as `timestamp_recorded` "
+                             "FROM `gas_purchases` "
+                             "WHERE gas_purchases.timestamp_recorded >= "
+                             (str "UNIX_TIMESTAMP(CONVERT_TZ(STR_TO_DATE('"
+                                  (-> from-date
+                                      (str " 00:00:00")
+                                      mysql-escape-str)
+                                  "', '%Y-%m-%d %H:%i:%s'), 'America/Los_Angeles', 'UTC'))")
+                             " AND gas_purchases.timestamp_recorded <= "
+                             (str "UNIX_TIMESTAMP(CONVERT_TZ(STR_TO_DATE('"
+                                  (-> to-date
+                                      (str " 23:59:59")
+                                      mysql-escape-str)
+                                  "', '%Y-%m-%d %H:%i:%s'), 'America/Los_Angeles', 'UTC'))")
+                             "AND gas_purchases.deleted != 1 "
+                             "ORDER BY gas_purchases.timestamp_recorded DESC")])
+        ;; all state log entries in date range
+        state-log (db/raw-sql-query
+                   db-conn
+                   [(str "SELECT state_log.data as `data`, "
+                         "state_log.timestamp_created as `timestamp_created` "
+                         "FROM `state_log` "
+                         "WHERE state_log.timestamp_created >= "
+                         (str "CONVERT_TZ(STR_TO_DATE('"
+                              (-> from-date
+                                  (str " 00:00:00")
+                                  mysql-escape-str)
+                              "', '%Y-%m-%d %H:%i:%s'), 'America/Los_Angeles', 'UTC')")
+                         " AND state_log.timestamp_created <= "
+                         (str "CONVERT_TZ(STR_TO_DATE('"
+                              (-> to-date
+                                  (str " 23:59:59")
+                                  mysql-escape-str)
+                              "', '%Y-%m-%d %H:%i:%s'), 'America/Los_Angeles', 'UTC')"))])
+        
+        _ (println "Time spent On Duty (number of Pings): "
+                   (reduce (fn [a b]
+                             (let [parsed-data (edn/read-string b)
+                                   on-duty-ids (map :id (:on-duty-couriers parsed-data))
+                                   in-on-duty-ids? (partial in? on-duty-ids)]
+                               (into {} (map (fn [[k v]] [k (if (in-on-duty-ids? k)
+                                                              (inc v)
+                                                              v)]) a))))
+                           (into {} (map (juxt identity (constantly 0))
+                                         (keys (group-by :courier_id orders))))
+                           (map :data state-log)))
+        grouped-orders (group-by :courier_id orders)
+        grouped-fleet-deliveries (group-by :courier_id fleet-deliveries)
+        grouped-gas-purchases (group-by :courier_id gas-purchases)]
+    (ring-io/piped-input-stream
+     (fn [ostream]
+       (let [writer (io/writer ostream)]
+         (csv/write-csv
+          writer
+          (apply
+           vector
+           (concat [["Courier Name"
+                     "# Orders"
+                     "# Fleet Deliveries"
+                     "# Gas Purchases"
+                     "Gallons Purchased"
+                     "Gallons Delivered (Orders)"
+                     "Gallons Delivered (Fleet Deliveries)"
+                     "Gallons Delivered Total - Purchased"
+                     "Avg. Gas Price Bought"
+                     "Avg. Gas Price Sold (Orders)"
+                     "Avg. Gas Price Sold (Fleet Deliveries)"
+                     "Avg. Assigned->Accepted Time"
+                     "Avg. Time Enroute"
+                     "Avg. Time Servicing"
+                     "Avg. Accepted->Completed Time"
+                     "% Late"
+                     "Avg. Rating (out of 5)"
+                     ]]
+                   (map (fn [[courier-id group-of-orders]]
+                          (let [gallons-purchased (->> (get grouped-gas-purchases courier-id)
+                                                       (map :gallons)
+                                                       (apply +)
+                                                       double)
+                                gallons-delivered-b2c (->> group-of-orders
+                                                           (map :gallons)
+                                                           (apply +)
+                                                           double)
+                                gallons-delivered-b2b (->> (get grouped-fleet-deliveries courier-id)
+                                                           (map :gallons)
+                                                           (apply +)
+                                                           double)
+                                avg-time-between-statuses
+                                (fn [start-status end-status]
+                                  (let [diff (/ (apply +
+                                                       (map (fn [o]
+                                                              (- (get-event-time (:event_log o) end-status)
+                                                                 (get-event-time (:event_log o) start-status)))
+                                                            group-of-orders))
+                                                (count group-of-orders))
+                                        hours (quot diff 3600)
+                                        minutes (quot (mod diff 3600) 60)]
+                                    (str hours "' " minutes "\"")))]
+                            (vec [(:courier_name (first group-of-orders))
+                                  (count group-of-orders)
+                                  (count (get grouped-fleet-deliveries courier-id))
+                                  (count (get grouped-gas-purchases courier-id))
+                                  (format "%.2f" gallons-purchased)
+                                  (format "%.2f" gallons-delivered-b2c)
+                                  (format "%.2f" gallons-delivered-b2b)
+                                  (format "%.2f" (- (+ gallons-delivered-b2c
+                                                       gallons-delivered-b2b)
+                                                    gallons-purchased))
+                                  (some->> (get grouped-gas-purchases courier-id)
+                                           (map #(/ (:total_price %) (:gallons %)))
+                                           (apply +)
+                                           (#(/ % (count (get grouped-gas-purchases courier-id))))
+                                           int
+                                           cents->dollars)
+                                  (some->> group-of-orders
+                                           (map :gas_price)
+                                           (apply +)
+                                           (#(/ % (count group-of-orders)))
+                                           int
+                                           cents->dollars)
+                                  (some->> (get grouped-fleet-deliveries courier-id)
+                                           (map :gas_price)
+                                           (apply +)
+                                           (#(/ % (count (get grouped-fleet-deliveries courier-id))))
+                                           int
+                                           cents->dollars)
+                                  (avg-time-between-statuses "assigned" "accepted")
+                                  (avg-time-between-statuses "enroute" "servicing")
+                                  (avg-time-between-statuses "servicing" "complete")
+                                  (avg-time-between-statuses "accepted" "complete")
+                                  (str (format "%.2f"
+                                               (double 
+                                                (* 100
+                                                   (/ (count (filter (fn [o]
+                                                                       (> (get-event-time (:event_log o) "complete")
+                                                                          (:target_time_end o)))
+                                                                     group-of-orders))
+                                                      (count group-of-orders)))))
+                                       "%")
+                                  (let [rated-orders (filter :number_rating group-of-orders)]
+                                    (if (empty? rated-orders)
+                                      "None"
+                                      (format
+                                       "%.2f"
+                                       (double 
+                                        (/ (apply + (map :number_rating rated-orders))
+                                           (count rated-orders))))))
+                                  ])))
+                        grouped-orders))))
          (.flush writer))))))

@@ -23,7 +23,8 @@
                                         update-courier!
                                         include-os-and-app-version
                                         include-arn-endpoint
-                                        download-courier-orders]]
+                                        download-courier-orders
+                                        download-courier-statistics]]
             [dashboard.login :as login]
             [dashboard.orders :refer [include-eta
                                       include-user-name-phone-and-courier
@@ -158,6 +159,9 @@
     :method "POST"
     :permissions ["view-couriers"]}
    {:uri "/download-courier-orders"
+    :method "POST"
+    :permissions ["view-couriers"]}
+   {:uri "/download-courier-statistics"
     :method "POST"
     :permissions ["view-couriers"]}
    ;;!! users
@@ -437,6 +441,26 @@
               (header "Content-Disposition"
                       (str "attachment; filename=\""
                            name
+                           ".csv"
+                           "\"")))))
+  (POST "/download-courier-statistics" req
+        (let [{from-date :from-date
+               to-date :to-date} (-> req
+                               ring.util.request/body-string
+                               url-decode
+                               (subs 8)
+                               (parse-string true))]
+          (-> (response (download-courier-statistics (conn) from-date to-date))
+              (header "Content-Type"
+                      (str "application/vnd.openxmlformats-officedocument."
+                           "spreadsheetml.sheet"
+                           " name=\"Courier Statistics "
+                           from-date " - " to-date
+                           ".csv"
+                           "\""))
+              (header "Content-Disposition"
+                      (str "attachment; filename=\"Courier Statistics "
+                           from-date " - " to-date
                            ".csv"
                            "\"")))))
   ;;!! users
